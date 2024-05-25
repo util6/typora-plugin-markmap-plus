@@ -1,12 +1,12 @@
 {
-  "id": "typora-community-plugin.example",
-  "name": "Example",
-  "description": "Example plugin for typora.",
+  "id": "typora-community-plugin.markmap",
+  "name": "Markmap",
+  "description": "Use Markmap in Typora.",
   "author": "plylrnsdy",
   "authorUrl": "https://github.com/plylrnsdy",
-  "repo": "typora-community-plugin/typora-plugin-example",
-  "version": "1.0.1",
-  "minAppVersion": "1.5.0",
-  "minCoreVersion": "2.0.0-beta.36",
+  "repo": "typora-community-plugin/typora-plugin-markmap",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "minCoreVersion": "2.0.0",
   "platforms": ["win32", "linux", "darwin"]
 }
