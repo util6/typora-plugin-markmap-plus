@@ -9,7 +9,17 @@ Use Markmap in Typora:
 - [x] codeblock type: `markmap`
 - [x] custom options
   - local options in the front matter inside a codeblock
+    > ```markmap
+    > ---
+    > colorFreezeLevel: 2
+    > ---
+    >
+    > (markdown content ...)
+    > ```
   - global options in Settings Modal
+    > ```yaml
+    > colorFreezeLevel: 2
+    > ```
 
 
 
