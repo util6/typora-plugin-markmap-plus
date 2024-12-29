@@ -7,6 +7,9 @@
 在 Typora 中使用 Markmap：
 
 - [x] `markmap` 类型代码块
+- [x] 自定义配置
+  - 在代码块中的 Front Matter 可配置本地配置
+  - 在插件配置对话框中可配置全局配置
 
 
 

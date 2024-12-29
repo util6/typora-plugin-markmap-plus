@@ -11,13 +11,15 @@ specifiers:
   '@rollup/plugin-typescript': ^11.1.5
   '@rollup/plugin-virtual': ^3.0.2
   '@types/jquery': 3.3.1
+  '@types/js-yaml': ^4.0.9
   '@types/node': 16.18.0
   '@types/typora': npm:@typora-community-plugin/typora-types@^1.0.6
-  '@typora-community-plugin/core': ^2.0.0
+  '@typora-community-plugin/core': ^2.3.33
   archiver: ^5.3.2
   esbuild: ^0.19.2
   esbuild-plugin-typora: npm:@typora-community-plugin/esbuild-plugin-typora@^1.0.11
   esbuild-sass-plugin: ^2.12.0
+  js-yaml: ^4.1.0
   markmap-common: ^0.17.0
   markmap-lib: ^0.17.0
   markmap-render: ^0.17.0
@@ -30,6 +32,7 @@ specifiers:
   typescript: ^5.1.6
 
 dependencies:
+  js-yaml: 4.1.0
   markmap-common: 0.17.0
   markmap-lib: 0.17.0_markmap-common@0.17.0
   markmap-render: 0.17.0_markmap-common@0.17.0
@@ -46,9 +49,10 @@ devDependencies:
   '@rollup/plugin-typescript': 11.1.5_qqme42u52zbv65dzghj7o53vqq
   '@rollup/plugin-virtual': 3.0.2_rollup@4.2.0
   '@types/jquery': 3.3.1
+  '@types/js-yaml': 4.0.9
   '@types/node': 16.18.0
   '@types/typora': /@typora-community-plugin/typora-types/1.0.6
-  '@typora-community-plugin/core': 2.0.0
+  '@typora-community-plugin/core': 2.3.33
   archiver: 5.3.2
   esbuild: 0.19.2
   esbuild-plugin-typora: /@typora-community-plugin/esbuild-plugin-typora/1.0.11
@@ -1662,6 +1666,7 @@ packages:
     resolution: {integrity: sha512-bNsTYQBgp4H7w6cT7FZhesxpcUPahsSIy4NgdZjH1ZwEoZHxi4XKglj+CsSEkhsKi+x6toVvMylhjRKhEMYfnA==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
     requiresBuild: true
     dev: true
     optional: true
@@ -1670,6 +1675,7 @@ packages:
     resolution: {integrity: sha512-Jp1NxBJpGLuxRU2ihrQk4IZ+ia5nffobG6sOFUPW5PMYkF0kQtxEbeDuCa69Xif211vUOcxlOnf5IOEIpTEySA==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
     requiresBuild: true
     dev: true
     optional: true
@@ -1678,6 +1684,7 @@ packages:
     resolution: {integrity: sha512-3p3iRtQmv2aXw+vtKNyZMLOQ+LSRsqArXjKAh2Oj9cqwfIRe7OXvdkOzWfZOIp1F/x5KJzVAxGxnniF4cMbnsQ==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
     requiresBuild: true
     dev: true
     optional: true
@@ -1686,6 +1693,7 @@ packages:
     resolution: {integrity: sha512-atih7IF/reUZe4LBLC5Izd44hth2tfDIG8LaPp4/cQXdHh9jabcZEvIeRPrpDq0i/Uu487Qu5gl5KwyAnWajnw==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
     requiresBuild: true
     dev: true
     optional: true
@@ -1905,6 +1913,10 @@ packages:
     resolution: {integrity: sha512-N3h+rzN518yl2xKrW0o6KKdNmWZ+OwG6SoM5TBEQFF0tTv5wXPEsoOuYQ2Kt3/89XbcSZUJLdjiT/2c3BR/ApQ==}
     dev: true
 
+  /@types/js-yaml/4.0.9:
+    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
+    dev: true
+
   /@types/node/16.18.0:
     resolution: {integrity: sha512-LqYqYzYvnbCaQfLAwRt0zboqnsViwhZm+vjaMSqcfN36vulAg7Pt0T83q4WZO2YOBw3XdyHi8cQ88H22zmULOA==}
     dev: true
@@ -1913,8 +1925,8 @@ packages:
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
     dev: true
 
-  /@typora-community-plugin/core/2.0.0:
-    resolution: {integrity: sha512-AqRIBz3JCcU8zFUBw2uhM2sm8fjjSCm20WdZLv6UcCqFkAtRxJgSDvceerB7WGVWoqYc2URJoZ7U8Se9srSiNQ==}
+  /@typora-community-plugin/core/2.3.33:
+    resolution: {integrity: sha512-L57qvi5TUcMQPu7YZAv9bYW1OQ8qK9JaGZFeOevvqEZJMZQ08cgpgd7HQWdT+gTyR8hOa3I4X6jXsFVxxRgHtQ==}
     dependencies:
       '@plylrnsdy/decorate.js': 1.0.1
     dev: true

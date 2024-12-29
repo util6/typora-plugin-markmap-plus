@@ -7,6 +7,9 @@ This a plugin based on [typora-community-plugin][core] for [Typora](https://typo
 Use Markmap in Typora:
 
 - [x] codeblock type: `markmap`
+- [x] custom options
+  - local options in the front matter inside a codeblock
+  - global options in Settings Modal
 
 
 

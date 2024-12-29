@@ -2,7 +2,7 @@
   "version": 1,
   "settings": {
     "displayLang": "zh-cn",
-    "githubProxy": "ghproxy.org",
+    "githubProxy": "github",
     "showNotSupportedFile": false,
     "showSearchResultFullPath": false,
     "showRibbon": true,
