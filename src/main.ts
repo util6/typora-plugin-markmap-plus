@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS: MarkmapSettings = {
   globalOptions: '',
 }
 
-const RE_FRONT_MATTER = /^---\n([\s\S]+?)\n---\n?/
+const RE_FRONT_MATTER = /^---\s*\n([\s\S]+?)\n---\s*\n?/
 
 export default class extends Plugin<MarkmapSettings> {
 
