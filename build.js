@@ -11,6 +11,14 @@ const IS_DEV = !IS_PROD
 
 await fs.rm('./dist', { recursive: true, force: true })
 
+await fs.cp('./node_modules/katex/dist/katex.min.css', './dist/katex.min.css')
+
+const woff2 = await fs.readdir('./node_modules/katex/dist/fonts')
+  .then(files => files.filter(file => file.endsWith('.woff2')))
+await Promise.all(woff2.map(file =>
+  fs.cp(`./node_modules/katex/dist/fonts/${file}`, `./dist/fonts/${file}`, { recursive: true })
+))
+
 await esbuild.build({
   entryPoints: ['src/main.ts'],
   outdir: 'dist',

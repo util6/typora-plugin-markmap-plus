@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import { defineConfig } from 'rollup'
 import { babel } from '@rollup/plugin-babel'
 import commonjs from '@rollup/plugin-commonjs'
+import json from '@rollup/plugin-json'
 import replace from '@rollup/plugin-replace'
 import { nodeResolve } from '@rollup/plugin-node-resolve'
 import scss from 'rollup-plugin-scss'
@@ -25,6 +26,16 @@ const overrided = {
 
 await fs.rm('./dist', { recursive: true, force: true })
 await fs.mkdir('./dist')
+
+await fs.cp('./node_modules/katex/dist/katex.min.js', './dist/katex.min.js')
+await fs.cp('./node_modules/katex/dist/katex.min.css', './dist/katex.min.css')
+
+const woff2 = await fs.readdir('./node_modules/katex/dist/fonts')
+  .then(files => files.filter(file => file.endsWith('.woff2')))
+await Promise.all(woff2.map(file =>
+  fs.cp(`./node_modules/katex/dist/fonts/${file}`, `./dist/fonts/${file}`, { recursive: true })
+))
+
 
 export default defineConfig({
   input: 'src/main.ts',
@@ -53,6 +64,7 @@ export default defineConfig({
         /\bcore-js\b/,
       ],
     }),
+    json(),
     scss({
       fileName: 'style.css',
       processor: (css, map) => ({ css: css.replace(/\n+\s*/g, '') }),
