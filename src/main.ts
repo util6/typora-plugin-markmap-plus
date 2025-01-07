@@ -1,7 +1,7 @@
 import { Transformer, builtInPlugins } from 'markmap-lib'
 import { deriveOptions, Markmap } from 'markmap-view'
 import * as yaml from 'js-yaml'
-import { CodeblockPostProcessor, Plugin, PluginSettings, html } from '@typora-community-plugin/core'
+import { CodeblockPostProcessor, path, Plugin, PluginSettings, html } from '@typora-community-plugin/core'
 import { i18n } from './i18n'
 import { MarkmapSettingTab } from './setting-tab'
 
@@ -25,6 +25,8 @@ export default class extends Plugin<MarkmapSettings> {
   mmOfCid: Record<string, Markmap> = {}
 
   onload() {
+
+    this.registerCss('./katex.min.css')
 
     this.registerSettings(
       new PluginSettings(this.app, this.manifest, {
@@ -77,6 +79,19 @@ export default class extends Plugin<MarkmapSettings> {
   onunload() {
     this.transformer = null as any
     this.reset()
+  }
+
+  registerCss(url: string) {
+    this.register(this.importCss(url))
+  }
+
+  importCss(url: string) {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.dataset.by = this.manifest.id
+    link.href = 'file://' + path.join(this.manifest.dir!, url)
+    document.head.appendChild(link)
+    return () => link.remove()
   }
 
   reset() {

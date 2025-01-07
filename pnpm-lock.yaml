@@ -20,6 +20,7 @@ specifiers:
   esbuild-plugin-typora: npm:@typora-community-plugin/esbuild-plugin-typora@^1.0.11
   esbuild-sass-plugin: ^2.12.0
   js-yaml: ^4.1.0
+  katex: ^0.16.19
   markmap-common: ^0.17.0
   markmap-lib: ^0.17.0
   markmap-render: ^0.17.0
@@ -33,6 +34,7 @@ specifiers:
 
 dependencies:
   js-yaml: 4.1.0
+  katex: 0.16.19
   markmap-common: 0.17.0
   markmap-lib: 0.17.0_markmap-common@0.17.0
   markmap-render: 0.17.0_markmap-common@0.17.0
@@ -2848,8 +2850,8 @@ packages:
       commander: 2.20.3
     dev: false
 
-  /katex/0.16.10:
-    resolution: {integrity: sha512-ZiqaC04tp2O5utMsl2TEZTXxa6WSC4yo0fv5ML++D3QZv/vx2Mct0mTlRx3O+uUkjfuAgOkzsCmq5MiUEsDDdA==}
+  /katex/0.16.19:
+    resolution: {integrity: sha512-3IA6DYVhxhBabjSLTNO9S4+OliA3Qvb8pBQXMfC4WxXJgLwZgnfDl0BmB4z6nBMdznBsZ+CGM8DrGZ5hcguDZg==}
     hasBin: true
     dependencies:
       commander: 8.3.0
@@ -2960,7 +2962,7 @@ packages:
       '@iktakahiro/markdown-it-katex': 4.0.1
       highlight.js: 11.9.0
       js-yaml: 4.1.0
-      katex: 0.16.10
+      katex: 0.16.19
       markdown-it: 14.1.0
       markdown-it-ins: 4.0.0
       markdown-it-mark: 4.0.0

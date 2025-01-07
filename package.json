@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
+    "katex": "^0.16.19",
     "markmap-common": "^0.17.0",
     "markmap-lib": "^0.17.0",
     "markmap-render": "^0.17.0",
