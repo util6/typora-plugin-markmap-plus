@@ -27,6 +27,7 @@ export default class extends Plugin<MarkmapSettings> {
   onload() {
 
     this.registerCss('./katex.min.css')
+    this.registerScript('./katex.min.js')
 
     this.registerSettings(
       new PluginSettings(this.app, this.manifest, {
@@ -79,6 +80,18 @@ export default class extends Plugin<MarkmapSettings> {
   onunload() {
     this.transformer = null as any
     this.reset()
+  }
+
+  registerScript(url: string) {
+    this.register(this.importScript(url))
+  }
+
+  importScript(url: string) {
+    const script = document.createElement('script')
+    script.dataset.by = this.manifest.id
+    script.src = 'file://' + path.join(this.manifest.dir!, url)
+    document.head.appendChild(script)
+    return () => script.remove()
   }
 
   registerCss(url: string) {

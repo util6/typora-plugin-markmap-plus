@@ -5,6 +5,7 @@ specifiers:
   '@babel/preset-env': ^7.23.2
   '@rollup/plugin-babel': ^6.0.4
   '@rollup/plugin-commonjs': ^25.0.7
+  '@rollup/plugin-json': ^6.1.0
   '@rollup/plugin-node-resolve': ^15.2.3
   '@rollup/plugin-replace': ^5.0.4
   '@rollup/plugin-terser': ^0.4.4
@@ -45,6 +46,7 @@ devDependencies:
   '@babel/preset-env': 7.23.5_@babel+core@7.23.5
   '@rollup/plugin-babel': 6.0.4_req37iva32dthitnfk6kcpii7i
   '@rollup/plugin-commonjs': 25.0.7_rollup@4.2.0
+  '@rollup/plugin-json': 6.1.0_rollup@4.2.0
   '@rollup/plugin-node-resolve': 15.2.3_rollup@4.2.0
   '@rollup/plugin-replace': 5.0.5_rollup@4.2.0
   '@rollup/plugin-terser': 0.4.4_rollup@4.2.0
@@ -1530,6 +1532,19 @@ packages:
       rollup: 4.2.0
     dev: true
 
+  /@rollup/plugin-json/6.1.0_rollup@4.2.0:
+    resolution: {integrity: sha512-EGI2te5ENk1coGeADSIwZ7G2Q8CJS2sF120T7jLw4xFw9n7wIOXHo+kIYRAoVpJAN+kmqZSoO3Fp4JtoNF4ReA==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+    dependencies:
+      '@rollup/pluginutils': 5.1.4_rollup@4.2.0
+      rollup: 4.2.0
+    dev: true
+
   /@rollup/plugin-node-resolve/15.2.3_rollup@4.2.0:
     resolution: {integrity: sha512-j/lym8nf5E21LwBT4Df1VD6hRO2L2iwUeUmP7litikRsVp1H6NWx20NEp0Y7su+7XGc476GnXXc4kFeZNGmaSQ==}
     engines: {node: '>=14.0.0'}
@@ -1621,6 +1636,21 @@ packages:
       '@types/estree': 1.0.4
       estree-walker: 2.0.2
       picomatch: 2.3.1
+      rollup: 4.2.0
+    dev: true
+
+  /@rollup/pluginutils/5.1.4_rollup@4.2.0:
+    resolution: {integrity: sha512-USm05zrsFxYLPdWWq+K3STlWiT/3ELn3RcV5hJMghpeAIhxfsUIg6mt12CBJBInWMV4VneoV7SfGv8xIwo2qNQ==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+    dependencies:
+      '@types/estree': 1.0.4
+      estree-walker: 2.0.2
+      picomatch: 4.0.2
       rollup: 4.2.0
     dev: true
 
@@ -3072,6 +3102,11 @@ packages:
   /picomatch/2.3.1:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
     engines: {node: '>=8.6'}
+    dev: true
+
+  /picomatch/4.0.2:
+    resolution: {integrity: sha512-M7BAV6Rlcy5u+m6oPhAPFgJTzAioX/6B0DxyvDlo9l8+T3nLKbrczg2WLUyzd45L8RqfUMyGPzekbMvX2Ldkwg==}
+    engines: {node: '>=12'}
     dev: true
 
   /prismjs/1.29.0:
