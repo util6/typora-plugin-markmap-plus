@@ -43,16 +43,46 @@ export default class extends Plugin<MarkmapSettings> {
     this.register(
       this.app.workspace.on('file:open', () => this.reset()))
 
+    this.registerCommand({
+      id: 'insert-markmap-template',
+      name: this.i18n.t('command.insert-markmap-template.name'),
+      callback: () => {
+        const editor = this.app.workspace.activeEditor
+        if (!editor) return
+
+        const template =
+`\`\`\`markmap
+---
+height: 300px
+backgroundColor: "#f8f8f8"
+---
+
+# markmap
+
+- branch 1
+  - sub-branch 1.1
+  - sub-branch 1.2
+- branch 2
+\`\`\``
+        editor.replaceSelection(template)
+      }
+    })
+
     this.registerMarkdownPostProcessor(
       CodeblockPostProcessor.from({
         lang: ['markmap', 'markdown markmap'],
         preview: async (code, pre) => {
           const { frontMatter, content } = parseMarkdown(code)
 
-          const svg = (pre.querySelector('.md-diagram-panel-preview svg')
-            ?? html`<svg style="width: 100%; max-height: 50vh"></svg>`) as any as SVGElement
+          const localOpts = yaml.load(frontMatter) ?? {}
 
-          svg.style.height = pre.offsetHeight + 'px'
+          const svg = (pre.querySelector('.md-diagram-panel-preview svg')
+            ?? html`<svg style="width: 100%"></svg>`) as any as SVGElement
+
+          svg.style.height = localOpts.height || '300px'
+          if (localOpts.backgroundColor) {
+            svg.style.backgroundColor = localOpts.backgroundColor
+          }
 
           // Waiting <svg> append to DOM
           setTimeout(() => {
@@ -61,7 +91,6 @@ export default class extends Plugin<MarkmapSettings> {
               ?? (this.mmOfCid[cid] = Markmap.create(svg as SVGElement))
 
             const globalOpts = yaml.load(this.settings.get('globalOptions')) ?? {}
-            const localOpts = yaml.load(frontMatter) ?? {}
             const jsonOpts = { ...globalOpts, ...localOpts }
             const opts = deriveOptions(jsonOpts)
             mm.setOptions(opts)
