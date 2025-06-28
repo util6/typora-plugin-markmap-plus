@@ -8,3 +8,4 @@ yalc.lock
 # output
 dist/
 plugin.zip
+release/

@@ -1,39 +1,227 @@
-# Typora Plugin Markmap
+# Typora Markmap Plugin
 
-English | [简体中文](./README.zh-CN.md)
+一个功能强大的 Typora 插件，让你能够在 Typora 中创建和查看交互式思维导图。
 
-This a plugin based on [typora-community-plugin][core] for [Typora](https://typora.io).
+## 功能特性
 
-Use Markmap in Typora:
+### 🎯 核心功能
 
-- [x] codeblock type: `markmap`
-- [x] custom options
-  - local options in the front matter inside a codeblock
-    > ```markmap
-    > ---
-    > colorFreezeLevel: 2
-    > ---
-    >
-    > (markdown content ...)
-    > ```
-  - global options in Settings Modal
-    > ```yaml
-    > colorFreezeLevel: 2
-    > ```
+| 功能模块 | 状态 | 描述 |
+|---------|------|------|
+| **代码块 Markmap** | ✅ 完整实现 | 在代码块中渲染思维导图 |
+| **TOC Markmap** | ✅ 完整实现 | 将文档目录结构转换为思维导图 |
+| **悬浮窗口** | ✅ 完整实现 | 可拖拽、可调整大小的悬浮窗口 |
+| **多种固定模式** | ✅ 完整实现 | 支持右侧固定、顶部固定、全屏展开 |
+| **实时更新** | ✅ 完整实现 | 文档变化时自动更新思维导图 |
+| **快捷键支持** | ✅ 完整实现 | `Ctrl+M` 快速切换 TOC Markmap |
 
+### 🎨 交互功能
 
+```mermaid
+graph TD
+    A[Markmap Plugin] --> B[代码块渲染]
+    A --> C[TOC 思维导图]
+    A --> D[悬浮按钮]
+    
+    B --> E[Front Matter 配置]
+    B --> F[实时渲染]
+    
+    C --> G[悬浮窗口]
+    C --> H[实时更新]
+    
+    G --> I[拖拽移动]
+    G --> J[大小调整]
+    G --> K[固定模式]
+    G --> L[鼠标穿透]
+    
+    K --> M[右侧固定]
+    K --> N[顶部固定]
+    K --> O[全屏展开]
 
-## Preview
+    classDef coreClass fill:#f9c74f,stroke:#f8961e,stroke-width:2px,color:#e85d04,font-weight:bold
+    classDef uiClass fill:#a7e8bd,stroke:#21ba45,stroke-width:2px,color:#2b9348,font-weight:bold
+    classDef funcClass fill:#ffccd5,stroke:#ff5d8f,stroke-width:2px,color:#c9184a,font-weight:bold
+    
+    class A,B,C coreClass
+    class D,G,I,J uiClass
+    class E,F,H,K,L,M,N,O funcClass
+```
 
-![](./docs/assets/base.png)
+## 安装方法
 
+### 方式一：开发模式安装
 
+1. 克隆项目到本地
+2. 安装依赖：`npm install`
+3. 构建并安装：`npm run dev`
+4. 重启 Typora
 
-## Install
+### 方式二：手动安装
 
-1. Install [typora-community-plugin][core]
-2. Open "Settings -> Plugin Marketplace" search "Markmap" then install it.
+1. 下载最新的发布版本
+2. 解压到 Typora 插件目录
+3. 重启 Typora
 
+## 使用指南
 
+### 代码块 Markmap
 
-[core]: https://github.com/typora-community-plugin/typora-community-plugin
+在 Typora 中创建 `markmap` 代码块：
+
+````markdown
+```markmap
+---
+height: 300px
+backgroundColor: "#f8f8f8"
+---
+
+# 项目管理
+
+## 计划阶段
+- 需求分析
+  - 用户调研
+  - 竞品分析
+- 技术选型
+
+## 开发阶段
+- 前端开发
+- 后端开发
+
+## 测试阶段
+- 单元测试
+- 集成测试
+```
+````
+
+### TOC Markmap
+
+1. **打开方式**：
+   - 使用快捷键 `Ctrl+M`
+   - 点击右下角的悬浮按钮
+   - 通过命令面板搜索 "Toggle TOC Markmap"
+
+2. **窗口操作**：
+   - **拖拽移动**：拖拽标题栏移动窗口
+   - **调整大小**：拖拽窗口边缘调整大小
+   - **工具栏功能**：
+
+| 按钮 | 功能 | 描述 |
+|------|------|------|
+| ⬆️ | 顶部固定 | 固定到编辑器顶部 |
+| 📌 | 右侧固定 | 固定到编辑器右侧 |
+| ⛶ | 全屏展开 | 全屏显示思维导图 |
+| ⟳ | 刷新 | 手动刷新思维导图 |
+| 🎯 | 适应视图 | 自动调整视图大小 |
+| 👻 | 鼠标穿透 | 允许鼠标操作穿透窗口 |
+| × | 关闭 | 关闭 TOC Markmap |
+
+### 插入模板
+
+通过命令面板搜索 "Insert Markmap Template" 可以快速插入一个预设的 markmap 代码块模板。
+
+## 配置选项
+
+### Front Matter 配置
+
+在 markmap 代码块中可以使用 YAML Front Matter 进行配置：
+
+```yaml
+---
+height: 400px              # 设置高度
+backgroundColor: "#f0f0f0"  # 设置背景色
+# 更多 markmap-lib 支持的选项...
+---
+```
+
+## 开发信息
+
+### 技术栈
+
+- **核心框架**: `@typora-community-plugin/core`
+- **思维导图引擎**: `markmap-lib`, `markmap-view`
+- **构建工具**: `esbuild`, `rollup`
+- **语言**: TypeScript
+
+### 项目结构
+
+```
+typora-plugin-markmap/
+├── src/
+│   ├── main.ts           # 主插件文件
+│   └── manifest.json     # 插件清单
+├── test/
+│   └── vault/
+│       └── doc.md        # 测试文档
+├── dist/                 # 构建输出
+├── build.js              # 开发构建脚本
+├── rollup.config.js      # 生产构建配置
+└── package.json          # 项目配置
+```
+
+### 构建命令
+
+| 命令 | 用途 |
+|------|------|
+| `npm run dev` | 开发模式构建并安装 |
+| `npm run build` | 生产模式构建 |
+| `npm run package` | 打包发布版本 |
+| `npm run test` | 构建并提示测试 |
+
+## 故障排除
+
+### 常见问题
+
+1. **插件没有加载**
+   - 检查 Typora 版本是否 >= 1.4.0
+   - 检查插件是否正确安装到插件目录
+   - 查看开发者工具控制台是否有错误信息
+
+2. **TOC Markmap 不显示**
+   - 确保文档中有标题（h1-h6）
+   - 检查快捷键是否冲突
+   - 尝试点击悬浮按钮
+
+3. **代码块不渲染**
+   - 确保代码块语言设置为 `markmap`
+   - 检查 markmap 语法是否正确
+   - 查看控制台错误信息
+
+### 调试模式
+
+开发模式下，插件会在控制台输出详细的调试信息：
+
+```javascript
+// 打开开发者工具查看日志
+console.log('Markmap Plugin: 插件加载完成')
+console.log('Markmap Plugin: 显示 TOC Markmap')
+```
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 项目
+2. 创建功能分支
+3. 提交更改
+4. 推送到分支
+5. 创建 Pull Request
+
+## 许可证
+
+MIT License
+
+## 更新日志
+
+### v1.2.0 (2024-06-28)
+- ✅ 完整重构插件架构
+- ✅ 实现所有核心功能
+- ✅ 添加详细的调试日志
+- ✅ 优化用户体验
+- ✅ 完善文档和测试
+
+### v1.1.3
+- 基础功能实现
+
+---
+
+**享受在 Typora 中创建思维导图的乐趣！** 🎉

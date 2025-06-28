@@ -11,6 +11,9 @@ const IS_DEV = !IS_PROD
 
 await fs.rm('./dist', { recursive: true, force: true })
 
+// 复制 manifest.json - 这是插件加载的关键文件
+await fs.cp('./src/manifest.json', './dist/manifest.json')
+
 await fs.cp('./node_modules/katex/dist/katex.min.css', './dist/katex.min.css')
 
 const woff2 = await fs.readdir('./node_modules/katex/dist/fonts')

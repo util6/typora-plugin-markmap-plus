@@ -1,17 +1,21 @@
 {
   "private": true,
   "name": "typora-plugin-markmap",
-  "version": "",
-  "description": "",
+  "version": "1.2.0",
+  "description": "Use Markmap in Typora - Create interactive mind maps from markdown content.",
   "type": "module",
-  "main": "",
+  "main": "dist/main.js",
   "scripts": {
     "build:dev": "node build.js",
     "build": "rollup -c rollup.config.js",
-    "package": "yarn build && node pack.js"
+    "package": "yarn build && node pack.cjs",
+    "dev": "node build.js",
+    "test": "node build.js && echo 'Plugin built and installed. Please test in Typora.'",
+    "deploy": "./deploy.sh",
+    "deploy:quick": "./quick-deploy.sh"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["typora", "plugin", "markmap", "mindmap", "markdown"],
+  "author": "plylrnsdy",
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.23.2",

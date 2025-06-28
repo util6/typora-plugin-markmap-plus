@@ -27,6 +27,9 @@ const overrided = {
 await fs.rm('./dist', { recursive: true, force: true })
 await fs.mkdir('./dist')
 
+// 复制 manifest.json 文件 - 这是插件加载的关键文件
+await fs.cp('./src/manifest.json', './dist/manifest.json')
+
 await fs.cp('./node_modules/katex/dist/katex.min.js', './dist/katex.min.js')
 await fs.cp('./node_modules/katex/dist/katex.min.css', './dist/katex.min.css')
 
