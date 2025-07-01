@@ -43,8 +43,10 @@ await Promise.all(woff2.map(file =>
 export default defineConfig({
   input: 'src/main.ts',
   output: {
-    file: 'dist/main.js',
+    dir: 'dist',
     format: 'es',
+    entryFileNames: 'main.js',
+    chunkFileNames: 'chunks/[name]-[hash].js',
   },
   plugins: [
     replace({

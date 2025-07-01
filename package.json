@@ -14,7 +14,13 @@
     "deploy": "./deploy.sh",
     "deploy:quick": "./quick-deploy.sh"
   },
-  "keywords": ["typora", "plugin", "markmap", "mindmap", "markdown"],
+  "keywords": [
+    "typora",
+    "plugin",
+    "markmap",
+    "mindmap",
+    "markdown"
+  ],
   "author": "plylrnsdy",
   "license": "MIT",
   "devDependencies": {
@@ -48,8 +54,8 @@
     "js-yaml": "^4.1.0",
     "katex": "^0.16.19",
     "markmap-common": "^0.17.0",
-    "markmap-lib": "^0.17.0",
+    "markmap-lib": "^0.18.12",
     "markmap-render": "^0.17.0",
-    "markmap-view": "^0.17.0"
+    "markmap-view": "^0.18.12"
   }
 }
