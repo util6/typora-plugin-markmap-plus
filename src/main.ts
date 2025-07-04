@@ -2,6 +2,7 @@ import { Plugin, CodeblockPostProcessor, html } from '@typora-community-plugin/c
 import { Transformer, builtInPlugins } from 'markmap-lib'
 import { Markmap, loadCSS, loadJS, deriveOptions } from 'markmap-view'
 import * as yaml from 'js-yaml'
+import { logger } from './utils'
 
 // 定义简单的树节点接口
 interface TreeNode {
@@ -69,90 +70,85 @@ function showStatus(message: string, type: 'info' | 'success' | 'error' = 'info'
   }, timeout)
 }
 
-// 调试工具函数
-function debug(message: string, data?: any) {
-  if (data) {
-    console.log(`[MARKMAP DEBUG] ${message}`, data)
-  } else {
-    console.log(`[MARKMAP DEBUG] ${message}`)
-  }
-  
-  // 在页面上显示调试信息
-  showStatus(`DEBUG: ${message}${data ? ' (check console)' : ''}`, 'info')
-}
 
 export default class MarkmapPlugin extends Plugin {
   // 界面元素
   floatingButton?: HTMLElement
   tocModal?: HTMLElement
-  
+
   // 实例存储
   mmOfCid: Record<string, any> = {}
   tocMarkmap?: any = null
-  
+
   // markmap库实例
   transformer: Transformer
-  
+
   // 状态标记
   isDebugMode = true
 
   onload() {
-    debug('插件开始加载')
-    
+
+
     try {
       // 初始化 markmap transformer
       this.transformer = new Transformer(builtInPlugins)
-      
+
       // 初始化资源
       this.initResources()
         .then(() => {
-          debug('资源初始化成功')
-          
+
+
           // 创建悬浮按钮
           this.initFloatingButton()
-          
+
           // 注册命令
           this.registerCommands()
-          
+
           // 注册代码块处理器
           this.registerCodeblockProcessor()
-          
-          debug('插件加载完成')
+
+          logger('插件加载完成😯😯😯😯😯😯')
         })
         .catch(error => {
-          debug(`资源初始化失败: ${error.message}`, error)
+          logger(`资源初始化失败: ${error.message}`, 'error', error)
         })
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
-      debug(`插件初始化失败: ${errorMsg}`, error)
+      logger(`插件初始化失败: ${errorMsg}`, 'error', error)
     }
   }
 
+
+
+
+
+
+
   async initResources() {
-    debug('开始初始化资源')
-    
+    logger('开始初始化资源')
+
     try {
       // 获取 markmap 所需的资源
       const { styles, scripts } = this.transformer.getAssets()
-      
-      debug('加载 CSS 资源', styles)
-      await loadCSS(styles)
-      
-      debug('加载 JS 资源', scripts)
-      await loadJS(scripts, { getMarkmap: () => ({ Markmap, loadCSS, loadJS, deriveOptions }) })
-      
-      debug('Markmap 资源加载成功')
-      
+
+      logger('加载 CSS 资源', 'debug', styles)
+      await loadCSS(styles ?? [])
+
+      logger('加载 JS 资源', 'debug', scripts)
+      await loadJS(scripts ?? [], { getMarkmap: () => ({ Markmap, loadCSS, loadJS, deriveOptions }) })
+
+      logger('Markmap 资源加载成功')
+
       return true
     } catch (error) {
-      debug(`加载 Markmap 资源失败: ${error.message}`, error)
+      logger(`加载 Markmap 资源失败: ${error.message}`, 'error', error)
       throw error
     }
   }
 
   initFloatingButton() {
-    debug('初始化悬浮按钮')
-    
+    logger('初始化悬浮按钮')
+
     try {
       this.floatingButton = document.createElement('div')
       this.floatingButton.className = 'markmap-floating-button'
@@ -160,7 +156,9 @@ export default class MarkmapPlugin extends Plugin {
       this.floatingButton.innerHTML = `<span style="font-size: 20px;">🗺️</span>`
 
       this.floatingButton.addEventListener('click', () => {
-        debug('悬浮按钮被点击')
+        var isWindows = () => navigator.platform.toUpperCase().indexOf('WIN') >= 0
+
+
         this.toggleTocMarkmap()
       })
 
@@ -254,17 +252,17 @@ export default class MarkmapPlugin extends Plugin {
         this.floatingButton?.remove()
         style.remove()
       })
-      
-      debug('悬浮按钮初始化成功')
+
+      logger('悬浮按钮初始化成功')
     } catch (error) {
-      debug(`悬浮按钮初始化失败: ${error.message}`, error)
+      logger(`悬浮按钮初始化失败: ${error.message}`, 'error', error)
       throw error
     }
   }
 
   registerCommands() {
-    debug('注册命令')
-    
+    logger('注册命令')
+
     try {
       this.registerCommand({
         id: 'toggle-toc-markmap',
@@ -272,48 +270,48 @@ export default class MarkmapPlugin extends Plugin {
         scope: 'editor',
         hotkey: 'cmd+m',
         callback: () => {
-          debug('执行命令: toggle-toc-markmap')
+          logger('执行命令: toggle-toc-markmap')
           this.toggleTocMarkmap()
         },
       })
-      
+
       this.registerCommand({
         id: 'insert-markmap-fence',
         title: '插入 Markmap 代码块',
         scope: 'editor',
         callback: () => {
-          debug('执行命令: insert-markmap-fence')
+          logger('执行命令: insert-markmap-fence')
           this.insertMarkmapFence()
         },
       })
-      
-      debug('命令注册成功')
+
+      logger('命令注册成功')
     } catch (error) {
-      debug(`命令注册失败: ${error.message}`, error)
+      logger(`命令注册失败: ${error.message}`, 'error', error)
     }
   }
 
   registerCodeblockProcessor() {
-    debug('注册代码块处理器')
-    
+    logger('注册代码块处理器')
+
     try {
       this.register(
         this.app.features.markdownEditor.postProcessor.register(
           CodeblockPostProcessor.from({
             lang: ['markmap', 'markdown markmap'],
             preview: async (code, pre) => {
-              debug('渲染 markmap 代码块', { code, pre })
-              
+              logger('渲染 markmap 代码块', 'debug', { code, pre })
+
               const svg = (pre.querySelector('.md-diagram-panel-preview svg')
                 ?? html`<svg class="plugin-fence-markmap-svg"></svg>`) as SVGElement
-  
+
               const cid = pre.getAttribute('cid')!
-              
+
               try {
                 // 解析前置参数
                 const options = this.parseFrontMatter(code)
-                debug('解析前置参数结果', options)
-                
+                logger('解析前置参数结果', 'debug', options)
+
                 // 设置 SVG 样式
                 if (options.height) {
                   svg.style.height = options.height
@@ -321,14 +319,14 @@ export default class MarkmapPlugin extends Plugin {
                 if (options.backgroundColor) {
                   svg.style.backgroundColor = options.backgroundColor
                 }
-                
+
                 // 获取纯 markdown 内容（去除前置参数）
                 const markdownContent = this.extractMarkdownContent(code)
-                
+
                 // 转换 Markdown 为思维导图数据
                 const { root } = this.transformer.transform(markdownContent)
-                debug('Markdown 转换结果', root)
-                
+                logger('Markdown 转换结果', 'debug', root)
+
                 // 合并配置项
                 const mmOptions = deriveOptions({
                   spacingHorizontal: 80,
@@ -339,47 +337,46 @@ export default class MarkmapPlugin extends Plugin {
                   color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
                   ...options
                 })
-                
+
                 // 渲染思维导图
                 setTimeout(() => {
                   try {
-                    debug('开始渲染思维导图', { cid, options: mmOptions })
-                    
+                    logger('开始渲染思维导图', 'debug', { cid, options: mmOptions })
+
                     // 如果已存在实例则销毁
                     if (this.mmOfCid[cid]) {
                       this.mmOfCid[cid].destroy()
                       delete this.mmOfCid[cid]
                     }
-                    
+
                     // 创建新实例
-                    debug('创建新的 Markmap 实例')
+                    logger('创建新的 Markmap 实例')
                     const mm = Markmap.create(svg, mmOptions, root)
                     this.mmOfCid[cid] = mm
-                    
+
                     // 适应视图
                     setTimeout(() => {
                       mm.fit()
-                      debug('Markmap 实例创建并适应视图成功')
+                      logger('Markmap 实例创建并适应视图成功')
                     }, 100)
                   } catch (error) {
-                    debug(`渲染思维导图错误: ${error.message}`, error)
+                    logger(`渲染思维导图错误: ${error.message}`, 'error', error)
                     this.renderErrorToSVG(svg, error.message)
                   }
                 }, 100)
               } catch (error) {
-                debug(`处理 markmap 代码块错误: ${error.message}`, error)
-                this.renderErrorToSVG(svg, error.message)
+                logger(`处理 markmap 代码块错误: ${error.message}`, 'error', error)
               }
-  
+
               return svg as unknown as HTMLElement
             }
           })
         )
       )
-      
-      debug('代码块处理器注册成功')
+
+      logger('代码块处理器注册成功')
     } catch (error) {
-      debug(`代码块处理器注册失败: ${error.message}`, error)
+      logger(`代码块处理器注册失败: ${error.message}`, 'error', error)
     }
   }
 
@@ -397,30 +394,30 @@ export default class MarkmapPlugin extends Plugin {
         paddingX: 20,
         autoFit: true
       }
-      
+
       // 检查是否有 YAML 前置内容
       const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
       if (!fmMatch) return defaultOptions
-      
+
       try {
         // 解析 YAML
         const yamlText = fmMatch[1]
         const yamlData = yaml.load(yamlText) as any
-        
+
         // 提取 markmap 配置
         const markmapConfig = yamlData?.markmap || yamlData
-        
+
         return {
           ...defaultOptions,
           ...markmapConfig
         }
       } catch (yamlError) {
-        debug(`YAML 解析失败，使用简单解析: ${yamlError.message}`)
-        
+        logger(`YAML 解析失败，使用简单解析: ${yamlError.message}`, 'warn')
+
         // 简单解析 YAML（备用方案）
         const yamlText = fmMatch[1]
         const options: Record<string, any> = {}
-        
+
         yamlText.split('\n').forEach(line => {
           const match = line.match(/^\s*(\w+):\s*(.+)$/)
           if (match) {
@@ -431,18 +428,18 @@ export default class MarkmapPlugin extends Plugin {
             } else if (!isNaN(Number(value))) {
               options[key] = Number(value)
             } else {
-              options[key] = value.replace(/['"]/g, '')
+              options[key] = value.replace(/["']/g, '')
             }
           }
         })
-        
+
         return {
           ...defaultOptions,
           ...options
         }
       }
     } catch (error) {
-      debug(`解析前置参数失败: ${error.message}`, error)
+      logger(`解析前置参数失败: ${error.message}`, 'error', error)
       return {
         zoom: false,
         pan: false,
@@ -489,8 +486,8 @@ export default class MarkmapPlugin extends Plugin {
   }
 
   showTocMarkmap() {
-    debug('显示 TOC Markmap')
-    
+    logger('显示 TOC Markmap')
+
     try {
       this.tocModal = document.createElement('div')
       this.tocModal.className = 'markmap-toc-modal'
@@ -507,66 +504,66 @@ export default class MarkmapPlugin extends Plugin {
           <svg class="markmap-svg"></svg>
         </div>
       `
-      
+
       document.body.appendChild(this.tocModal)
-      
+
       // 绑定按钮事件
       this.tocModal.addEventListener('click', (e) => {
         const target = e.target as HTMLElement
         const action = target.getAttribute('data-action')
-        
+
         switch (action) {
           case 'close':
             this.hideTocMarkmap()
             break
           case 'refresh':
-            debug('刷新 TOC')
+            logger('刷新 TOC')
             this.updateTocMarkmap()
             break
           case 'fit':
-            debug('适应视图')
+            logger('适应视图')
             if (this.tocMarkmap) {
               this.tocMarkmap.fit()
             }
             break
         }
       })
-      
+
       // 初始化 TOC 内容
       this.updateTocMarkmap()
-      
-      debug('TOC 窗口显示成功')
+
+      logger('TOC 窗口显示成功')
     } catch (error) {
-      debug(`TOC 窗口显示失败: ${error.message}`, error)
+      logger(`TOC 窗口显示失败: ${error.message}`, 'error', error)
     }
   }
-  
+
   updateTocMarkmap() {
     if (!this.tocModal) return
-    
+
     try {
-      debug('更新 TOC Markmap')
-      
+      logger('更新 TOC Markmap')
+
       const svg = this.tocModal.querySelector('.markmap-svg') as SVGElement
       if (!svg) return
-      
+
       // 获取文档标题
       const headings = this.getDocumentHeadings()
-      debug('文档标题:', headings)
-      
+      logger('文档标题:', 'debug', headings)
+
       if (headings.length === 0) {
         this.renderEmptyTOC(svg)
         return
       }
-      
+
       // 构建 markdown 内容
       const markdownContent = this.buildTocMarkdown(headings)
-      debug('TOC Markdown 内容:', markdownContent)
-      
+      logger('TOC Markdown 内容:', 'debug', markdownContent)
+
       // 转换为 markmap 数据格式
       const { root } = this.transformer.transform(markdownContent)
-      debug('Markmap 数据:', root)
-      
+      logger('Markmap 数据:', 'debug', root)
+
       // 渲染到 SVG
       const options = deriveOptions({
         spacingHorizontal: 80,
@@ -578,90 +575,126 @@ export default class MarkmapPlugin extends Plugin {
         colorFreezeLevel: 2,
         initialExpandLevel: 3
       })
-      
+
       // 销毁旧实例
       if (this.tocMarkmap) {
         this.tocMarkmap.destroy()
       }
-      
+
       // 创建新实例
       this.tocMarkmap = Markmap.create(svg, options, root)
-      debug('TOC Markmap 创建成功')
-      
+      logger('TOC Markmap 创建成功')
+
       // 适应视图
       setTimeout(() => {
         this.tocMarkmap.fit()
       }, 100)
-      
-      // 点击节点时滚动到对应标题
+
+      // 点击节点时获取标题路径并滚动到对应位置
       svg.addEventListener('click', (e) => {
         const target = e.target as Element
         const nodeEl = target.closest('.markmap-node')
-        
+
         if (nodeEl && nodeEl.getAttribute('data-path')) {
-          const path = nodeEl.getAttribute('data-path')
-          const pathParts = path ? path.split('.') : []
+          // 获取标题路径
+          const titlePath = this.getNodeTitlePath(nodeEl);
           
-          // 根据路径找到对应的标题
-          if (pathParts.length > 1) {
-            const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1
-            if (headings[headingIndex]) {
-              const heading = headings[headingIndex]
-              const headingEl = document.querySelector(`h${heading.level}[id="${heading.id}"]`) ||
-                               document.querySelector(`h${heading.level}:contains("${heading.text}")`)
-              
-              if (headingEl) {
-                headingEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                debug(`滚动到标题: ${heading.text}`)
+          if (titlePath.length > 0) {
+            logger(`点击的节点标题路径: ${titlePath.join(' > ')}`);
+            
+            // 这里可以添加其他需要根据标题路径执行的操作
+            // 滚动到对应的标题位置
+            const path = nodeEl.getAttribute('data-path');
+            const pathParts = path ? path.split('.') : [];
+            
+            if (pathParts.length > 1) {
+              const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
+              if (headings[headingIndex]) {
+                const heading = headings[headingIndex];
+                const headingEl = document.querySelector(`h${heading.level}[id="${heading.id}"]`) ||
+                                 document.querySelector(`h${heading.level}[data-text="${heading.text}"]`);
+
+                if (headingEl) {
+                  headingEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  logger(`滚动到标题: ${heading.text}`);
+                }
               }
             }
           }
         }
-      })
+      });
     } catch (error) {
-      debug(`TOC Markmap 渲染错误: ${error.message}`, error)
+      logger(`TOC Markmap 渲染错误: ${error.message}`, 'error', error)
       this.renderErrorToSVG(svg, error.message)
     }
   }
-  
+
   buildTocMarkdown(headings: Array<{level: number, text: string, id: string}>): string {
     // 构建层级化的 markdown 内容
-    let markdown = '# 文档目录\n\n'
-    
+    let markdown = ''
+
     for (const heading of headings) {
       const indent = '#'.repeat(heading.level)
       markdown += `${indent} ${heading.text}\n`
     }
-    
+
     return markdown
   }
-  
+
   getDocumentHeadings() {
     const headings: Array<{level: number, text: string, id: string}> = []
     const write = document.querySelector('#write')
     if (!write) return []
-    
+
     const hs = write.querySelectorAll('h1, h2, h3, h4, h5, h6')
     hs.forEach((h: Element) => {
       const level = parseInt(h.tagName.substring(1))
       const text = (h as HTMLElement).innerText.trim()
       const id = h.id || `heading-${headings.length}`
-      
+
       if (text) {
         headings.push({ level, text, id })
       }
     })
-    
+
     return headings
   }
-  
+
+  // 获取点击节点的标题路径
+  getNodeTitlePath(nodeEl: Element): string[] {
+    const path = nodeEl.getAttribute('data-path');
+    const pathParts = path ? path.split('.') : [];
+    
+    if (pathParts.length > 1) {
+      const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
+      const headings = this.getDocumentHeadings();
+      
+      if (headings[headingIndex]) {
+        const pathToNode: string[] = [];
+        let currentLevel = 1;
+        
+        // 构建标题路径
+        for (let i = 0; i <= headingIndex; i++) {
+          if (headings[i].level >= currentLevel) {
+            pathToNode.push(headings[i].text);
+            currentLevel = headings[i].level + 1;
+          }
+        }
+        
+        return pathToNode;
+      }
+    }
+    
+    return [];
+  }
+
   renderEmptyTOC(svg: SVGElement) {
     svg.innerHTML = ''
     svg.style.backgroundColor = '#f8f9fa'
-    
+
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
     g.setAttribute('transform', 'translate(50, 50)')
-    
+
     // 图标
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     icon.setAttribute('x', '150')
@@ -669,7 +702,7 @@ export default class MarkmapPlugin extends Plugin {
     icon.setAttribute('text-anchor', 'middle')
     icon.setAttribute('font-size', '48')
     icon.textContent = '📄'
-    
+
     // 提示文本
     const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text1.setAttribute('x', '150')
@@ -678,7 +711,7 @@ export default class MarkmapPlugin extends Plugin {
     text1.setAttribute('font-size', '14')
     text1.setAttribute('fill', '#666')
     text1.textContent = '当前文档没有标题'
-    
+
     const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text2.setAttribute('x', '150')
     text2.setAttribute('y', '160')
@@ -686,13 +719,13 @@ export default class MarkmapPlugin extends Plugin {
     text2.setAttribute('font-size', '12')
     text2.setAttribute('fill', '#999')
     text2.textContent = '请添加一些标题来生成思维导图'
-    
+
     g.appendChild(icon)
     g.appendChild(text1)
     g.appendChild(text2)
     svg.appendChild(g)
   }
-  
+
   renderErrorToSVG(svg: SVGElement, errorMessage: string) {
     svg.innerHTML = ''
     svg.style.backgroundColor = '#ffebee'
@@ -706,24 +739,24 @@ export default class MarkmapPlugin extends Plugin {
     text.textContent = `渲染错误: ${errorMessage}`
     svg.appendChild(text)
   }
-  
+
   hideTocMarkmap() {
     if (this.tocModal) {
       this.tocModal.remove()
       this.tocModal = undefined
-      
+
       // 销毁 markmap 实例
       if (this.tocMarkmap) {
         this.tocMarkmap.destroy()
         this.tocMarkmap = undefined
       }
-      
-      debug('TOC 窗口已关闭')
+
+      logger('TOC 窗口已关闭')
     }
   }
-  
+
   insertMarkmapFence() {
-    const template = `\`\`\`markmap
+    const template = `\`\`\`\`markmap
 ---
 markmap:
   zoom: false
@@ -745,32 +778,32 @@ markmap:
 - 要点 1
   - 详细内容
 - 要点 2
-\`\`\``
-    
+\`\`\`\``
+
     // 插入到编辑器
     try {
-      debug('插入 Markmap 代码块模板')
-      
+      logger('插入 Markmap 代码块模板')
+
       // 使用 typora 原生 API
       const { editor } = require('typora')
       if (editor) {
         const selection = editor.selection
         if (selection) {
           selection.insertText(template)
-          debug('代码块模板已插入')
+          logger('代码块模板已插入')
         }
       }
     } catch (error) {
-      debug(`插入代码块失败: ${error.message}`, error)
+      logger(`插入代码块失败: ${error.message}`, 'error', error)
     }
   }
 
   onunload() {
-    debug('插件卸载')
-    
+    logger('插件卸载')
+
     // 清理资源
     this.hideTocMarkmap()
-    
+
     // 清理代码块实例
     Object.values(this.mmOfCid).forEach(mm => {
       if (mm && typeof mm.destroy === 'function') {
@@ -778,7 +811,7 @@ markmap:
       }
     })
     this.mmOfCid = {}
-    
-    debug('Markmap 插件已卸载')
+
+    logger('Markmap 插件已卸载')
   }
 }
