@@ -532,6 +532,9 @@ export default class MarkmapPlugin extends Plugin {
       // 初始化 TOC 内容
       this.updateTocMarkmap()
 
+      // 初始化事件监听器
+      this.initTocEventListeners()
+
       logger('TOC 窗口显示成功')
     } catch (error) {
       logger(`TOC 窗口显示失败: ${error.message}`, 'error', error)
@@ -589,40 +592,6 @@ export default class MarkmapPlugin extends Plugin {
       setTimeout(() => {
         this.tocMarkmap.fit()
       }, 100)
-
-      // 点击节点时获取标题路径并滚动到对应位置
-      svg.addEventListener('click', (e) => {
-        const target = e.target as Element
-        const nodeEl = target.closest('.markmap-node')
-
-        if (nodeEl && nodeEl.getAttribute('data-path')) {
-          // 获取标题路径
-          const titlePath = this.getNodeTitlePath(nodeEl);
-          
-          if (titlePath.length > 0) {
-            logger(`点击的节点标题路径: ${titlePath.join(' > ')}`);
-            
-            // 这里可以添加其他需要根据标题路径执行的操作
-            // 滚动到对应的标题位置
-            const path = nodeEl.getAttribute('data-path');
-            const pathParts = path ? path.split('.') : [];
-            
-            if (pathParts.length > 1) {
-              const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
-              if (headings[headingIndex]) {
-                const heading = headings[headingIndex];
-                const headingEl = document.querySelector(`h${heading.level}[id="${heading.id}"]`) ||
-                                 document.querySelector(`h${heading.level}[data-text="${heading.text}"]`);
-
-                if (headingEl) {
-                  headingEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  logger(`滚动到标题: ${heading.text}`);
-                }
-              }
-            }
-          }
-        }
-      });
     } catch (error) {
       logger(`TOC Markmap 渲染错误: ${error.message}`, 'error', error)
       this.renderErrorToSVG(svg, error.message)
@@ -660,32 +629,79 @@ export default class MarkmapPlugin extends Plugin {
     return headings
   }
 
-  // 获取点击节点的标题路径
-  getNodeTitlePath(nodeEl: Element): string[] {
+  // 根据思维导图节点获取标题路径
+  getNodeTitlePath(nodeEl: Element): { path: string[], index: number } {
     const path = nodeEl.getAttribute('data-path');
-    const pathParts = path ? path.split('.') : [];
-    
-    if (pathParts.length > 1) {
-      const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
+    if (!path) return { path: [], index: -1 };
+
+    const pathParts = path.split('.');
+    if (pathParts.length <= 1) return { path: [], index: -1 };
+
+    const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
+    const headings = this.getDocumentHeadings();
+
+    if (headingIndex < 0 || headingIndex >= headings.length) {
+      return { path: [], index: -1 };
+    }
+
+    const pathToNode: string[] = [];
+    let currentLevel = 1;
+
+    // 构建标题路径
+    for (let i = 0; i <= headingIndex; i++) {
+      if (headings[i].level >= currentLevel) {
+        pathToNode.push(headings[i].text);
+        currentLevel = headings[i].level + 1;
+      }
+    }
+
+    return { path: pathToNode, index: headingIndex };
+  }
+
+  // 根据给定的节点元素滚动到对应的标题位置
+  scrollToHeadingByNode(nodeEl: Element) {
+    const { path, index } = this.getNodeTitlePath(nodeEl);
+
+    if (path.length > 0 && index >= 0) {
+      logger(`点击的节点标题路径: ${path.join(' > ')}`);
+
+      // 获取文档中的所有标题信息
       const headings = this.getDocumentHeadings();
-      
-      if (headings[headingIndex]) {
-        const pathToNode: string[] = [];
-        let currentLevel = 1;
-        
-        // 构建标题路径
-        for (let i = 0; i <= headingIndex; i++) {
-          if (headings[i].level >= currentLevel) {
-            pathToNode.push(headings[i].text);
-            currentLevel = headings[i].level + 1;
+      if (index < headings.length) {
+        const heading = headings[index];
+        // 查找对应的标题元素
+        const allHeadings = document.querySelectorAll(`h${heading.level}`);
+        for (const el of allHeadings) {
+          // 精确匹配文本内容和层级
+          if (el.tagName === `H${heading.level}` && el.textContent === heading.text) {
+            logger(`通过层级和文本内容找到标题: H${heading.level} ${el.textContent}`);
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            logger(`滚动到标题: ${heading.text}`);
+            return;
           }
         }
         
-        return pathToNode;
+        logger(`未找到匹配的标题元素: ${heading.text}`, 'error');
       }
     }
-    
-    return [];
+  }
+
+  initTocEventListeners() {
+    if (!this.tocModal) return;
+
+    const svg = this.tocModal.querySelector('.markmap-svg') as SVGElement;
+    if (!svg) return;
+
+    // 绑定节点点击事件
+    svg.addEventListener('click', (e) => {
+      const target = e.target as Element;
+      const nodeEl = target.closest('.markmap-node');
+
+      if (nodeEl && nodeEl.getAttribute('data-path')) {
+        // 调用独立的滚动函数
+        this.scrollToHeadingByNode(nodeEl);
+      }
+    });
   }
 
   renderEmptyTOC(svg: SVGElement) {
