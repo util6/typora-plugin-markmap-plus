@@ -1,7 +1,8 @@
-import { Transformer, builtInPlugins } from 'markmap-lib'
-import { deriveOptions, Markmap } from 'markmap-view'
 import * as yaml from 'js-yaml'
 import { CodeblockPostProcessor, path, Plugin, PluginSettings, html } from '@typora-community-plugin/core'
+import { Transformer, builtInPlugins } from 'markmap-lib'
+import { deriveOptions, Markmap } from 'markmap-view'
+import { imageTransformer } from './transformer-image'
 import { i18n } from './i18n'
 import { MarkmapSettingTab } from './setting-tab'
 
@@ -38,7 +39,7 @@ export default class extends Plugin<MarkmapSettings> {
 
     this.registerSettingTab(new MarkmapSettingTab(this))
 
-    this.transformer = new Transformer([...builtInPlugins])
+    this.transformer = new Transformer([...builtInPlugins, imageTransformer])
 
     this.register(
       this.app.workspace.on('file:open', () => this.reset()))
