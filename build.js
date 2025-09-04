@@ -38,5 +38,5 @@ if (IS_DEV) {
 
   await installDevPlugin()
   await closeTypora()
-  child_process.exec('Typora ./test/vault/doc.md')
+  child_process.exec('Typora ./test/vault/markdown.md')
 }
