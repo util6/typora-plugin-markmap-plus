@@ -20,6 +20,7 @@ Use Markmap in Typora:
     > ```yaml
     > colorFreezeLevel: 2
     > ```
+- [x] Use command to `View the editing markdown with Markmap on right`
 
 
 

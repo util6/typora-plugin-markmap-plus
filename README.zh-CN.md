@@ -20,6 +20,7 @@
     > ```yaml
     > colorFreezeLevel: 2
     > ```
+- [x] 使用命令 `在右侧打开正在编辑的 Markdown 的 Markmap 视图`
 
 
 
