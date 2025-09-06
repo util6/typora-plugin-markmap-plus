@@ -11,7 +11,7 @@ interface MarkmapSettings {
 }
 
 const DEFAULT_SETTINGS: MarkmapSettings = {
-  globalOptions: '',
+  globalOptions: 'autoFit: true',
 }
 
 export default class MarkmapPlugin extends Plugin<MarkmapSettings> {

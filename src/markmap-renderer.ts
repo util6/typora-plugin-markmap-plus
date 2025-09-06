@@ -52,7 +52,7 @@ export function renderMarkmap(options: Options) {
     const { root } = transformer.transform(content)
     mm.setData(root)
 
-    mm.fit()
+    mm.fit(1)
   })
   return
 }
