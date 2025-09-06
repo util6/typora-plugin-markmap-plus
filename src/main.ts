@@ -1,10 +1,9 @@
-import * as yaml from 'js-yaml'
-import { CodeblockPostProcessor, path, Plugin, PluginSettings, html } from '@typora-community-plugin/core'
-import { Transformer, builtInPlugins } from 'markmap-lib'
-import { deriveOptions, Markmap } from 'markmap-view'
-import { imageTransformer } from './transformer-image'
+import { CodeblockPostProcessor, path, Plugin, PluginSettings, html, WorkspaceLeaf, type DisposeFunc } from '@typora-community-plugin/core'
+import { Markmap } from 'markmap-view'
+import { renderMarkmap } from './markmap-renderer'
 import { i18n } from './i18n'
 import { MarkmapSettingTab } from './setting-tab'
+import { MarkmapView } from './markmap-view'
 
 
 interface MarkmapSettings {
@@ -15,23 +14,20 @@ const DEFAULT_SETTINGS: MarkmapSettings = {
   globalOptions: '',
 }
 
-const RE_FRONT_MATTER = /^---\s*\n([\s\S]+?)\n---\s*\n?/
-
-export default class extends Plugin<MarkmapSettings> {
+export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
 
   i18n = i18n
-
-  transformer: Transformer
 
   mmOfCid: Record<string, Markmap> = {}
 
   onload() {
+    const { app } = this
 
     this.registerCss('./katex.min.css')
     this.registerScript('./katex.min.js')
 
     this.registerSettings(
-      new PluginSettings(this.app, this.manifest, {
+      new PluginSettings(app, this.manifest, {
         version: 1,
       }))
 
@@ -39,47 +35,46 @@ export default class extends Plugin<MarkmapSettings> {
 
     this.registerSettingTab(new MarkmapSettingTab(this))
 
-    this.transformer = new Transformer([...builtInPlugins, imageTransformer])
-
     this.register(
-      this.app.workspace.on('file:open', () => this.reset()))
+      app.workspace.on('file:open', () => this.reset()))
 
     this.registerMarkdownPostProcessor(
       CodeblockPostProcessor.from({
         lang: ['markmap', 'markdown markmap'],
         preview: async (code, pre) => {
-          const { frontMatter, content } = parseMarkdown(code)
-
+          const cid = pre.getAttribute('cid')!
           const svg = (pre.querySelector('.md-diagram-panel-preview svg')
             ?? html`<svg style="width: 100%; max-height: 50vh"></svg>`) as any as SVGElement
 
           svg.style.height = pre.offsetHeight + 'px'
 
-          // Waiting <svg> append to DOM
-          setTimeout(() => {
-            const cid = pre.getAttribute('cid')!
-            const mm = this.mmOfCid[cid]
-              ?? (this.mmOfCid[cid] = Markmap.create(svg as SVGElement))
-
-            const globalOpts = yaml.load(this.settings.get('globalOptions')) ?? {}
-            const localOpts = yaml.load(frontMatter) ?? {}
-            const jsonOpts = { ...globalOpts, ...localOpts }
-            const opts = deriveOptions(jsonOpts)
-            mm.setOptions(opts)
-
-            const { root } = this.transformer.transform(content)
-            mm.setData(root)
-
-            mm.fit()
+          renderMarkmap({
+            globalOptions: this.settings.get('globalOptions'),
+            markdown: code,
+            getMarkmap: () => this.mmOfCid[cid] = this.mmOfCid[cid] ?? Markmap.create(svg),
           })
 
           return svg as any
         }
       }))
+
+    this.register(app.viewManager.registerView('markmap', leaf => new MarkmapView(leaf, this)))
+
+    this.registerCommand({
+      id: 'show-active-markdown',
+      title: this.i18n.t.viewEditingMarkdwon,
+      scope: 'global',
+      callback: () => {
+        const { rootSplit } = app.workspace
+        const markmapLeaf = rootSplit.findLeaf<WorkspaceLeaf<MarkmapView>>(leaf => leaf.view instanceof MarkmapView)
+        if (markmapLeaf) return
+
+        app.commands.run('core.workspace:split-right', [`typ://${MarkmapView.type}/Markmap Previewer`])
+      },
+    })
   }
 
   onunload() {
-    this.transformer = null as any
     this.reset()
   }
 
@@ -112,16 +107,4 @@ export default class extends Plugin<MarkmapSettings> {
     Object.values(this.mmOfCid).forEach(v => v.destroy())
     this.mmOfCid = {}
   }
-}
-
-function parseMarkdown(md: string) {
-  let frontMatter = ''
-
-  const content = md
-    .replace(RE_FRONT_MATTER, (_, $1) => {
-      frontMatter = $1
-      return ''
-    })
-
-  return { frontMatter, content }
 }
