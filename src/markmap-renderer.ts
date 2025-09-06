@@ -43,7 +43,8 @@ export function renderMarkmap(options: Options) {
   setTimeout(() => {
     const { frontMatter, content } = parseMarkdown(options.markdown)
     const globalOpts = yaml.load(options.globalOptions) ?? {}
-    const localOpts = yaml.load(frontMatter) ?? {}
+    const fronMatterJson = yaml.load(frontMatter) ?? {} as any
+    const localOpts = fronMatterJson.markmap ?? fronMatterJson
     const jsonOpts = { ...globalOpts, ...localOpts }
     const opts = deriveOptions(jsonOpts)
     const mm = options.getMarkmap()

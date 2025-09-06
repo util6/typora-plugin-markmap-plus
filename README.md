@@ -21,6 +21,15 @@ Use Markmap in Typora:
     > colorFreezeLevel: 2
     > ```
 - [x] Use command to `View the editing markdown with Markmap on right`
+  - local options in the front matter
+    > ```markdown
+    > ---
+    > markmap:
+    >   colorFreezeLevel: 2
+    > ---
+    >
+    > (markdown content ...)
+    > ```
 
 
 
