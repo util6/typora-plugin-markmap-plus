@@ -3,16 +3,16 @@ markmap:
   colorFreezeLevel: 2
 ---
 
-# 脑图功能
+# Markmap
 
-## 列表
+## List
 
 - **strong** ~~del~~ *italic* ==highlight==
 - `inline code`
 - [x] checkbox
 - Katex: $x = {-b \pm \sqrt{b^2-4ac} \over 2a}$ 
 
-## 代码
+## Code
 
 ```js
 for (let i = 0; i < 5; i++) {
@@ -20,11 +20,11 @@ for (let i = 0; i < 5; i++) {
 }
 ```
 
-## 表格
+## Table
 
-| Header1 | Header2            |
-| ------- | ------------------ |
-| item 1  | 1. one<br />2. two |
+| Header 1 | Header 2                     |
+| -------- | ---------------------------- |
+| item 1   | 1. item one<br />2. item two |
 
 
 ## 图片

@@ -35,7 +35,13 @@
 
 ## 预览
 
+代码块
+
 ![](./docs/assets/base.png)
+
+在右侧预览
+
+![](./docs/assets/split-right.jpg)
 
 
 

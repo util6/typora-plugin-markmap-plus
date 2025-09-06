@@ -35,7 +35,13 @@ Use Markmap in Typora:
 
 ## Preview
 
+Codeblock
+
 ![](./docs/assets/base.png)
+
+Preview on right
+
+![](./docs/assets/split-right.jpg)
 
 
 
