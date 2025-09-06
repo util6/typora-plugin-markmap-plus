@@ -27,6 +27,6 @@ for (let i = 0; i < 5; i++) {
 | item 1   | 1. item one<br />2. item two |
 
 
-## 图片
+## Image
 
 ![favicon](favicon.png)
