@@ -36,7 +36,9 @@ for (let i = 0; i < 5; i++) {
 
 ### 图片
 
-![favicon](./favicon.png)
+- markdown image ![](./favicon.png)
+
+- html image<img src="./favicon.png" />
 
 
 ````

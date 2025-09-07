@@ -8,22 +8,35 @@ const resolveImagePath: ITransformPlugin = {
   name: 'resolveImagePath',
   transform(ctx) {
     ctx.parser.tap(md => {
-      const defaultRender = md.renderer.rules.image || function (tokens: any, idx: number, options: any, env: any, self: any) {
+      const defaultRender = function (tokens: any, idx: number, options: any, env: any, self: any) {
         return self.renderToken(tokens, idx, options)
       }
+
+      const defaultImageRender = md.renderer.rules.image || defaultRender
 
       md.renderer.rules.image = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
         const token = tokens[idx]
 
         const src = token.attrGet('src')
         if (src) {
-          const relativePath = src.replace(/^typora:\/\/app\/typemark\//, '')
-          const resolvedSrc = editor.imgEdit.getRealSrc(relativePath)
-
-          token.attrSet('src', resolvedSrc)
+          token.attrSet('src', editor.imgEdit.getRealSrc(src))
         }
 
-        return defaultRender(tokens, idx, options, env, self)
+        return defaultImageRender(tokens, idx, options, env, self)
+      }
+
+      const defaultHtmlInlineRender = md.renderer.rules.html_inline || defaultRender
+
+      md.renderer.rules.html_inline = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
+        const token = tokens[idx] as { content: string }
+
+        if (token.content.startsWith('<img')) {
+          token.content = token.content.replace(/ src=(["'])([^'"]+)\1/, (_, __, $relativePath) => {
+            return ` src="${editor.imgEdit.getRealSrc($relativePath)}"`
+          })
+        }
+
+        return defaultHtmlInlineRender(tokens, idx, options, env, self)
       }
     })
     return {}

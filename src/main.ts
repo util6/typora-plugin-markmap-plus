@@ -1,4 +1,4 @@
-import { CodeblockPostProcessor, path, Plugin, PluginSettings, html, WorkspaceLeaf, type DisposeFunc } from '@typora-community-plugin/core'
+import { CodeblockPostProcessor, path, Plugin, PluginSettings, html, WorkspaceLeaf } from '@typora-community-plugin/core'
 import { Markmap } from 'markmap-view'
 import { renderMarkmap } from './markmap-renderer'
 import { i18n } from './i18n'
