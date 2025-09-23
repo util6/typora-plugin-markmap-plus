@@ -13,7 +13,10 @@ yarn package > /dev/null 2>&1
 
 # 部署
 echo "📋 部署中..."
-cp "release/markmap/main.js" "/Users/util6/Library/Application Support/abnerworks.Typora/plugins/plugins/markmap/main.js"
+cp "release/markmap/main.js" "/Users/util6/Library/Application Support/abnerworks.Typora/plugins/plugins/markmap-plus/main.js"
+cp "release/markmap/manifest.json" "/Users/util6/Library/Application Support/abnerworks.Typora/plugins/plugins/markmap-plus/manifest.json"
+
+
 
 # 重启 Typora
 echo "🔄 重启 Typora..."

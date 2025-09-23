@@ -65,8 +65,7 @@ export default class MarkmapPlugin extends Plugin {
           // 注册命令
           this.registerCommands()
 
-          // 注册设置选项卡
-          this.registerSettings()
+
 
           // 注册代码块处理器
           this.registerCodeblockProcessor()
@@ -82,33 +81,7 @@ export default class MarkmapPlugin extends Plugin {
     }
   }
 
-  registerSettings() {
-    this.registerSettingTab('markmap-settings', {
-      title: 'Markmap Settings',
-      icon: 'ion-md-settings',
-      onRender: (container) => {
-        // 创建设置面板内容
-        const panel = document.createElement('div');
-        panel.className = 'markmap-setting-panel';
-        panel.innerHTML = `
-          <h3>Markmap Settings</h3>
-          <p>在这里可以放置 Markmap 插件的配置选项。</p>
-          <!-- 可以在此处添加具体的设置项 -->
-        `;
-        
-        // 将设置面板添加到容器中
-        container.appendChild(panel);
-      },
-      onEnter: () => {
-        logger('进入设置面板');
-        // 当用户进入设置面板时的回调
-      },
-      onLeave: () => {
-        logger('离开设置面板');
-        // 当用户离开设置面板时的回调
-      }
-    });
-  }
+
 
   async initResources() {
     logger('开始初始化资源')
@@ -449,20 +422,6 @@ export default class MarkmapPlugin extends Plugin {
     return content
   }
 
-  renderErrorToSVG(svg: SVGElement, errorMessage: string) {
-    svg.innerHTML = ''
-    svg.style.backgroundColor = '#ffebee'
-    svg.style.border = '1px solid #f44336'
-
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-    text.setAttribute('x', '10')
-    text.setAttribute('y', '30')
-    text.setAttribute('font-size', '12')
-    text.setAttribute('fill', '#f44336')
-    text.textContent = `渲染错误: ${errorMessage}`
-    svg.appendChild(text)
-  }
-
   toggleTocMarkmap() {
     if (this.tocModal) {
       this.hideTocMarkmap()
@@ -517,10 +476,10 @@ export default class MarkmapPlugin extends Plugin {
 
       // 初始化 TOC 内容
       this.updateTocMarkmap()
-      
+
       // 初始化事件监听器
       this.initTocEventListeners()
-      
+
       logger('TOC 窗口显示成功')
     } catch (error) {
       logger(`TOC 窗口显示失败: ${error.message}`, 'error', error)
@@ -559,7 +518,6 @@ export default class MarkmapPlugin extends Plugin {
         spacingVertical: 20,
         fitRatio: 0.95,
         paddingX: 20,
-        autoFit: true,
         color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
         colorFreezeLevel: 2,
         initialExpandLevel: 3
@@ -580,7 +538,10 @@ export default class MarkmapPlugin extends Plugin {
       }, 100)
     } catch (error) {
       logger(`TOC Markmap 渲染错误: ${error.message}`, 'error', error)
-      this.renderErrorToSVG(svg, error.message)
+      const svg = this.tocModal?.querySelector('.markmap-svg') as SVGElement
+      if (svg) {
+        this.renderErrorToSVG(svg, error.message)
+      }
     }
   }
 
