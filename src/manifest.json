@@ -1,11 +1,11 @@
 {
-  "id": "typora-community-plugin.markmap",
+  "id": "typora-community-plugin.markmapplus",
   "name": "Markmap",
   "description": "Use Markmap in Typora - Create interactive mind maps from markdown content.",
-  "author": "plylrnsdy",
-  "authorUrl": "https://github.com/plylrnsdy",
+  "author": "util6",
+  "authorUrl": "https://github.com/util6",
   "repo": "typora-community-plugin/typora-plugin-markmap",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "minCoreVersion": "2.3.33",
   "platforms": ["win32", "linux", "darwin"]

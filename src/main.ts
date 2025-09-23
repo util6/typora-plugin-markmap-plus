@@ -29,46 +29,7 @@ interface MarkmapOptions {
   duration?: number
 }
 
-// 显示状态消息的工具函数
-function showStatus(message: string, type: 'info' | 'success' | 'error' = 'info') {
-  const statusDiv = document.createElement('div')
 
-  const colors = {
-    info: '#2196F3',
-    success: '#4CAF50',
-    error: '#f44336'
-  }
-
-  const existingMessages = document.querySelectorAll('[data-status-message]')
-  const topOffset = 10 + (existingMessages.length * 45)
-
-  statusDiv.style.cssText = `
-    position: fixed;
-    top: ${topOffset}px;
-    right: 10px;
-    background: ${colors[type]};
-    color: white;
-    padding: 8px 12px;
-    border-radius: 4px;
-    z-index: 10000;
-    font-size: 11px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    max-width: 350px;
-    word-wrap: break-word;
-    font-family: monospace;
-    line-height: 1.3;
-  `
-  statusDiv.setAttribute('data-status-message', 'true')
-  statusDiv.textContent = message
-  document.body.appendChild(statusDiv)
-
-  const timeout = type === 'error' ? 8000 : (type === 'success' ? 4000 : 3000)
-  setTimeout(() => {
-    if (statusDiv.parentNode) {
-      statusDiv.remove()
-    }
-  }, timeout)
-}
 
 
 export default class MarkmapPlugin extends Plugin {
@@ -104,6 +65,9 @@ export default class MarkmapPlugin extends Plugin {
           // 注册命令
           this.registerCommands()
 
+          // 注册设置选项卡
+          this.registerSettings()
+
           // 注册代码块处理器
           this.registerCodeblockProcessor()
 
@@ -118,11 +82,33 @@ export default class MarkmapPlugin extends Plugin {
     }
   }
 
-
-
-
-
-
+  registerSettings() {
+    this.registerSettingTab('markmap-settings', {
+      title: 'Markmap Settings',
+      icon: 'ion-md-settings',
+      onRender: (container) => {
+        // 创建设置面板内容
+        const panel = document.createElement('div');
+        panel.className = 'markmap-setting-panel';
+        panel.innerHTML = `
+          <h3>Markmap Settings</h3>
+          <p>在这里可以放置 Markmap 插件的配置选项。</p>
+          <!-- 可以在此处添加具体的设置项 -->
+        `;
+        
+        // 将设置面板添加到容器中
+        container.appendChild(panel);
+      },
+      onEnter: () => {
+        logger('进入设置面板');
+        // 当用户进入设置面板时的回调
+      },
+      onLeave: () => {
+        logger('离开设置面板');
+        // 当用户离开设置面板时的回调
+      }
+    });
+  }
 
   async initResources() {
     logger('开始初始化资源')
@@ -531,10 +517,10 @@ export default class MarkmapPlugin extends Plugin {
 
       // 初始化 TOC 内容
       this.updateTocMarkmap()
-
+      
       // 初始化事件监听器
       this.initTocEventListeners()
-
+      
       logger('TOC 窗口显示成功')
     } catch (error) {
       logger(`TOC 窗口显示失败: ${error.message}`, 'error', error)
@@ -565,7 +551,7 @@ export default class MarkmapPlugin extends Plugin {
 
       // 转换为 markmap 数据格式
       const { root } = this.transformer.transform(markdownContent)
-      logger('Markmap 数据:', 'debug', root)
+      logger('Markmap 数据:', 'warn', root)
 
       // 渲染到 SVG
       const options = deriveOptions({
@@ -632,6 +618,7 @@ export default class MarkmapPlugin extends Plugin {
   // 根据思维导图节点获取标题路径
   getNodeTitlePath(nodeEl: Element): { path: string[], index: number } {
     const path = nodeEl.getAttribute('data-path');
+    logger('节点路径:', 'warn', path)
     if (!path) return { path: [], index: -1 };
 
     const pathParts = path.split('.');
@@ -680,7 +667,7 @@ export default class MarkmapPlugin extends Plugin {
             return;
           }
         }
-        
+
         logger(`未找到匹配的标题元素: ${heading.text}`, 'error');
       }
     }
