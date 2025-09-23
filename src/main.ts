@@ -440,6 +440,8 @@ export default class MarkmapPlugin extends Plugin {
         <div class="markmap-toc-header">
           <span class="markmap-toc-title">目录思维导图</span>
           <div class="markmap-toc-buttons">
+            <button class="markmap-toc-btn" data-action="zoom-in" title="放大">🔍+</button>
+            <button class="markmap-toc-btn" data-action="zoom-out" title="缩小">🔍-</button>
             <button class="markmap-toc-btn" data-action="refresh" title="刷新">🔄</button>
             <button class="markmap-toc-btn" data-action="fit" title="适应视图">🎯</button>
             <button class="markmap-toc-btn" data-action="close" title="关闭">×</button>
@@ -465,11 +467,14 @@ export default class MarkmapPlugin extends Plugin {
             logger('刷新 TOC')
             this.updateTocMarkmap()
             break
+          case 'zoom-in':
+            this.zoomIn()
+            break
+          case 'zoom-out':
+            this.zoomOut()
+            break
           case 'fit':
-            logger('适应视图')
-            if (this.tocMarkmap) {
-              this.tocMarkmap.fit()
-            }
+            this.fitToMousePosition(event as MouseEvent)
             break
         }
       })
@@ -576,63 +581,207 @@ export default class MarkmapPlugin extends Plugin {
     return headings
   }
 
-  // 根据思维导图节点获取标题路径
-  getNodeTitlePath(nodeEl: Element): { path: string[], index: number } {
-    const path = nodeEl.getAttribute('data-path');
-    logger('节点路径:', 'warn', path)
-    if (!path) return { path: [], index: -1 };
-
-    const pathParts = path.split('.');
-    if (pathParts.length <= 1) return { path: [], index: -1 };
-
-    const headingIndex = parseInt(pathParts[pathParts.length - 1]) - 1;
-    const headings = this.getDocumentHeadings();
-
-    if (headingIndex < 0 || headingIndex >= headings.length) {
-      return { path: [], index: -1 };
-    }
-
-    const pathToNode: string[] = [];
-    let currentLevel = 1;
-
-    // 构建标题路径
-    for (let i = 0; i <= headingIndex; i++) {
-      if (headings[i].level >= currentLevel) {
-        pathToNode.push(headings[i].text);
-        currentLevel = headings[i].level + 1;
-      }
-    }
-
-    return { path: pathToNode, index: headingIndex };
-  }
-
   // 根据给定的节点元素滚动到对应的标题位置
   scrollToHeadingByNode(nodeEl: Element) {
-    const { path, index } = this.getNodeTitlePath(nodeEl);
+    // 获取节点的文本内容
+    const nodeText = nodeEl.textContent?.trim();
+    if (!nodeText) return;
 
-    if (path.length > 0 && index >= 0) {
-      logger(`点击的节点标题路径: ${path.join(' > ')}`);
+    logger(`点击的节点文本: ${nodeText}`);
 
-      // 获取文档中的所有标题信息
-      const headings = this.getDocumentHeadings();
-      if (index < headings.length) {
-        const heading = headings[index];
-        // 查找对应的标题元素
-        const allHeadings = document.querySelectorAll(`h${heading.level}`);
-        for (const el of allHeadings) {
-          // 精确匹配文本内容和层级
-          if (el.tagName === `H${heading.level}` && el.textContent === heading.text) {
-            logger(`通过层级和文本内容找到标题: H${heading.level} ${el.textContent}`);
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            logger(`滚动到标题: ${heading.text}`);
-            return;
-          }
-        }
+    // 在文档中查找匹配的标题
+    const write = document.querySelector('#write');
+    if (!write) return;
 
-        logger(`未找到匹配的标题元素: ${heading.text}`, 'error');
+    const allHeadings = write.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const heading of Array.from(allHeadings)) {
+      if (heading.textContent?.trim() === nodeText) {
+        logger(`找到匹配的标题: ${heading.tagName} ${heading.textContent}`);
+        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
       }
     }
+
+    logger(`未找到匹配的标题: ${nodeText}`, 'warn');
   }
+
+  // 简单的放大功能
+  zoomIn() {
+    const svg = this.tocModal?.querySelector('.markmap-svg') as SVGElement
+    if (!svg) return
+
+    const currentScale = parseFloat(svg.dataset.scale || '1')
+    const newScale = currentScale * 1.2
+
+    svg.style.transform = `scale(${newScale})`
+    svg.style.transformOrigin = 'center center'
+    svg.dataset.scale = newScale.toString()
+
+    logger(`放大到: ${newScale}倍`)
+  }
+
+  // 简单的缩小功能
+  zoomOut() {
+    const svg = this.tocModal?.querySelector('.markmap-svg') as SVGElement
+    if (!svg) return
+
+    const currentScale = parseFloat(svg.dataset.scale || '1')
+    const newScale = Math.max(currentScale / 1.2, 0.3) // 最小0.3倍
+
+    svg.style.transform = `scale(${newScale})`
+    svg.style.transformOrigin = 'center center'
+    svg.dataset.scale = newScale.toString()
+
+    logger(`缩小到: ${newScale}倍`)
+  }
+
+  // 以当前编辑器位置为中心的适应视图
+  fitToMousePosition(event?: MouseEvent) {
+    if (!this.tocModal) return
+
+    const svg = this.tocModal.querySelector('.markmap-svg') as SVGElement
+    if (!svg) return
+
+    // 获取当前编辑器中可见的标题
+    const currentHeadingObj = this.getCurrentVisibleHeading()
+    if (!currentHeadingObj) {
+      // 没有找到当前标题，使用默认适应
+      svg.style.transform = 'scale(10.0)'
+      svg.style.transformOrigin = 'center center'
+      svg.dataset.scale = '10.0'
+      logger('未找到当前标题，使用默认适应视图')
+      return
+    }
+
+    const currentHeading = currentHeadingObj.text
+    logger(`当前可见标题: "${currentHeading}"`)
+
+    // 在思维导图中找到对应的节点
+    const nodeElements = svg.querySelectorAll('g > foreignObject')
+    let targetElement = null
+
+    for (const nodeEl of Array.from(nodeElements)) {
+      const textContent = nodeEl.textContent?.trim() || ''
+      if (textContent === currentHeading) {
+        targetElement = nodeEl.parentElement
+        logger(`找到匹配节点: "${textContent}"`)
+        break
+      }
+    }
+
+    if (targetElement) {
+      // 计算合适的缩放比例
+      const scale = this.calculateOptimalScale(targetElement, currentHeadingObj)
+
+      // 获取节点在SVG中的实际位置
+      const svgRect = svg.getBoundingClientRect()
+      const nodeRect = targetElement.getBoundingClientRect()
+
+      // 计算节点相对于SVG的位置
+      const nodeX = nodeRect.left - svgRect.left + nodeRect.width / 2
+      const nodeY = nodeRect.top - svgRect.top + nodeRect.height / 2
+
+      // 设置缩放和变换原点
+      svg.style.transform = `scale(${scale})`
+      svg.style.transformOrigin = `${nodeX}px ${nodeY}px`
+      svg.dataset.scale = scale.toString()
+
+      logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}，中心点: (${nodeX}, ${nodeY})`)
+    } else {
+      // 没找到对应节点时使用默认适应
+      const scale = 1.0
+      svg.style.transform = `scale(${scale})`
+      svg.style.transformOrigin = 'center center'
+      svg.dataset.scale = scale.toString()
+      logger(`未找到标题"${currentHeading}"对应的节点，使用默认适应视图`)
+    }
+  }
+
+  // 计算最佳缩放比例，使节点文字大小与正文相同
+  calculateOptimalScale(nodeElement: Element, headingObj: any) {
+    try {
+      // 获取正文内容的字体大小
+      const writeElement = document.querySelector('#write')
+      if (!writeElement) return 2.0
+
+      // 查找正文段落元素
+      const paragraph = writeElement.querySelector('p') || writeElement
+      const documentFontSize = window.getComputedStyle(paragraph).fontSize
+      const documentSize = parseFloat(documentFontSize)
+
+      // 获取节点的实际渲染高度
+      const nodeRect = nodeElement.getBoundingClientRect()
+      const nodeHeight = nodeRect.height
+
+      // 节点高度通常比字体大小大一些（包含行高、padding等）
+      // 经验值：节点高度约为字体大小的1.2-1.5倍
+      const estimatedNodeFontSize = nodeHeight / 1.3
+
+      // 计算缩放比例
+      const scale = documentSize / estimatedNodeFontSize
+
+      // 限制缩放范围在合理区间内
+      const clampedScale = Math.max(0.8, Math.min(scale, 8.0))
+
+      logger(`正文字体大小: ${documentSize}px, 节点高度: ${nodeHeight}px, 推算字体大小: ${estimatedNodeFontSize.toFixed(1)}px, 计算缩放: ${scale.toFixed(2)}, 最终缩放: ${clampedScale.toFixed(2)}`)
+
+      return clampedScale
+    } catch (error) {
+      logger(`计算缩放比例失败: ${error.message}`, 'error')
+      return 2.0 // 默认缩放
+    }
+  }
+
+  // 获取当前可见的标题
+  getCurrentVisibleHeading() {
+    const write = document.querySelector('#write')
+    if (!write) return null
+
+    const headings = write.querySelectorAll('h1, h2, h3, h4, h5, h6')
+    const viewportTop = window.scrollY
+    const viewportBottom = viewportTop + window.innerHeight
+
+    // 找到第一个在视口中的标题
+    for (const heading of Array.from(headings)) {
+      const rect = heading.getBoundingClientRect()
+      const elementTop = rect.top + window.scrollY
+
+      // 如果标题在视口中或刚好在视口上方一点
+      if (elementTop >= viewportTop - 100 && elementTop <= viewportBottom) {
+        return {
+          text: heading.textContent?.trim() || '',
+          level: parseInt(heading.tagName.substring(1)),
+          element: heading
+        }
+      }
+    }
+
+    // 如果没有找到在视口中的标题，返回最接近视口顶部的标题
+    let closestHeading = null
+    let minDistance = Infinity
+
+    for (const heading of Array.from(headings)) {
+      const rect = heading.getBoundingClientRect()
+      const elementTop = rect.top + window.scrollY
+      const distance = Math.abs(elementTop - viewportTop)
+
+      if (distance < minDistance) {
+        minDistance = distance
+        closestHeading = {
+          text: heading.textContent?.trim() || '',
+          level: parseInt(heading.tagName.substring(1)),
+          element: heading
+        }
+      }
+    }
+
+    return closestHeading
+  }
+
+
+
+
+
 
   initTocEventListeners() {
     if (!this.tocModal) return;
@@ -645,8 +794,7 @@ export default class MarkmapPlugin extends Plugin {
       const target = e.target as Element;
       const nodeEl = target.closest('.markmap-node');
 
-      if (nodeEl && nodeEl.getAttribute('data-path')) {
-        // 调用独立的滚动函数
+      if (nodeEl) {
         this.scrollToHeadingByNode(nodeEl);
       }
     });
@@ -748,14 +896,16 @@ markmap:
     try {
       logger('插入 Markmap 代码块模板')
 
-      // 使用 typora 原生 API
-      const { editor } = require('typora')
-      if (editor) {
-        const selection = editor.selection
-        if (selection) {
-          selection.insertText(template)
-          logger('代码块模板已插入')
-        }
+      // 使用简单的方式插入文本
+      const activeElement = document.activeElement
+      if (activeElement && (activeElement as any).insertText) {
+        (activeElement as any).insertText(template)
+        logger('代码块模板已插入')
+      } else {
+        // 备用方案：复制到剪贴板
+        navigator.clipboard.writeText(template).then(() => {
+          logger('模板已复制到剪贴板，请手动粘贴')
+        })
       }
     } catch (error) {
       logger(`插入代码块失败: ${error.message}`, 'error', error)
