@@ -1,9 +1,9 @@
-import { Plugin, CodeblockPostProcessor, html, debounce, until, format } from '@typora-community-plugin/core'
+import { Plugin, CodeblockPostProcessor, html, debounce, until, format, PluginSettings } from '@typora-community-plugin/core'
 import { Transformer, builtInPlugins } from 'markmap-lib'
 import { Markmap, loadCSS, loadJS, deriveOptions } from 'markmap-view'
 import * as yaml from 'js-yaml'
 import { logger } from './utils'
-
+import { MarkmapSettings, DEFAULT_SETTINGS, MarkmapSettingTab } from './settings'
 
 // 定义 Markmap 配置接口
 interface MarkmapOptions {
@@ -26,7 +26,7 @@ interface MarkmapOptions {
 
 
 
-export default class MarkmapPlugin extends Plugin {
+export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
   // 界面元素
   floatingButton?: HTMLElement
   tocModal?: HTMLElement
@@ -39,27 +39,31 @@ export default class MarkmapPlugin extends Plugin {
   transformer: Transformer
 
   // 状态标记
-  isDebugMode = true
+  private resourcesLoaded = false
+  private eventCleanupFunctions: (() => void)[] = []
 
   onload() {
-
-
     try {
+      // 注册设置实例
+      this.registerSettings(new PluginSettings(this.app, this.manifest, {
+        version: 1
+      }))
+
+      // 初始化设置
+      this.settings.setDefault(DEFAULT_SETTINGS)
+      this.settings.load()
+
+      // 注册设置面板
+      this.registerSettingTab(new MarkmapSettingTab(this.settings))
+
       // 初始化 markmap transformer
       this.transformer = new Transformer(builtInPlugins)
 
       // 初始化资源
       this.initResources()
         .then(() => {
-
-
           // 创建悬浮按钮
           this.initFloatingButton()
-
-          // 注册命令
-          this.registerCommands()
-
-
 
           // 注册代码块处理器
           this.registerCodeblockProcessor()
@@ -78,6 +82,11 @@ export default class MarkmapPlugin extends Plugin {
 
 
   async initResources() {
+    if (this.resourcesLoaded) {
+      logger('资源已加载，跳过重复加载')
+      return true
+    }
+
     logger('开始初始化资源')
 
     try {
@@ -90,6 +99,7 @@ export default class MarkmapPlugin extends Plugin {
       logger('加载 JS 资源', 'debug', scripts)
       await loadJS(scripts ?? [], { getMarkmap: () => ({ Markmap, loadCSS, loadJS, deriveOptions }) })
 
+      this.resourcesLoaded = true
       logger('Markmap 资源加载成功')
 
       return true
@@ -109,9 +119,6 @@ export default class MarkmapPlugin extends Plugin {
       this.floatingButton.innerHTML = `<span style="font-size: 20px;">🗺️</span>`
 
       this.floatingButton.addEventListener('click', () => {
-        var isWindows = () => navigator.platform.toUpperCase().indexOf('WIN') >= 0
-
-
         this.toggleTocMarkmap()
       })
 
@@ -204,6 +211,8 @@ export default class MarkmapPlugin extends Plugin {
       this.register(() => {
         this.floatingButton?.remove()
         style.remove()
+        this.eventCleanupFunctions.forEach(cleanup => cleanup())
+        this.eventCleanupFunctions = []
       })
 
       logger('悬浮按钮初始化成功')
@@ -213,36 +222,6 @@ export default class MarkmapPlugin extends Plugin {
     }
   }
 
-  registerCommands() {
-    logger('注册命令')
-
-    try {
-      this.registerCommand({
-        id: 'toggle-toc-markmap',
-        title: '显示/隐藏目录思维导图',
-        scope: 'editor',
-        hotkey: 'cmd+m',
-        callback: () => {
-          logger('执行命令: toggle-toc-markmap')
-          this.toggleTocMarkmap()
-        },
-      })
-
-      this.registerCommand({
-        id: 'insert-markmap-fence',
-        title: '插入 Markmap 代码块',
-        scope: 'editor',
-        callback: () => {
-          logger('执行命令: insert-markmap-fence')
-          this.insertMarkmapFence()
-        },
-      })
-
-      logger('命令注册成功')
-    } catch (error) {
-      logger(`命令注册失败: ${error.message}`, 'error', error)
-    }
-  }
 
   registerCodeblockProcessor() {
     logger('注册代码块处理器')
@@ -278,7 +257,6 @@ export default class MarkmapPlugin extends Plugin {
 
                 // 转换 Markdown 为思维导图数据
                 const { root } = this.transformer.transform(markdownContent)
-                logger('Markdown 转换结果', 'debug', root)
 
                 // 合并配置项
                 const mmOptions = deriveOptions({
@@ -417,10 +395,14 @@ export default class MarkmapPlugin extends Plugin {
   }
 
   async toggleTocMarkmap() {
-    if (this.tocModal && this.tocModal.style.display !== 'none') {
-      this.hideTocMarkmap()
-    } else {
-      await this.showTocMarkmap()
+    try {
+      if (this.tocModal && this.tocModal.style.display !== 'none') {
+        this.hideTocMarkmap()
+      } else {
+        await this.showTocMarkmap()
+      }
+    } catch (error) {
+      logger(`切换 TOC Markmap 失败: ${error.message}`, 'error', error)
     }
   }
 
@@ -430,6 +412,8 @@ export default class MarkmapPlugin extends Plugin {
     try {
       this.tocModal = document.createElement('div')
       this.tocModal.className = 'markmap-toc-modal'
+      this.tocModal.style.width = `${this.settings.get('tocWindowWidth')}px`
+      this.tocModal.style.height = `${this.settings.get('tocWindowHeight')}px`
       this.tocModal.innerHTML = `
         <div class="markmap-toc-header">
           <span class="markmap-toc-title">目录思维导图</span>
@@ -449,28 +433,37 @@ export default class MarkmapPlugin extends Plugin {
       document.body.appendChild(this.tocModal)
 
       // 绑定按钮事件
-      this.tocModal.addEventListener('click', async (e) => {
+      const buttonClickHandler = async (e: Event) => {
         const target = e.target as HTMLElement
         const action = target.getAttribute('data-action')
 
-        switch (action) {
-          case 'close':
-            this.hideTocMarkmap()
-            break
-          case 'refresh':
-            logger('刷新 TOC')
-            await this.updateTocMarkmap()
-            break
-          case 'zoom-in':
-            this.zoomIn()
-            break
-          case 'zoom-out':
-            this.zoomOut()
-            break
-          case 'fit':
-            this.fitToMousePosition(event as MouseEvent)
-            break
+        try {
+          switch (action) {
+            case 'close':
+              this.hideTocMarkmap()
+              break
+            case 'refresh':
+              logger('刷新 TOC')
+              await this.updateTocMarkmap()
+              break
+            case 'zoom-in':
+              this.zoomIn()
+              break
+            case 'zoom-out':
+              this.zoomOut()
+              break
+            case 'fit':
+              this.fitToMousePosition(event as MouseEvent)
+              break
+          }
+        } catch (error) {
+          logger(`按钮操作失败: ${error.message}`, 'error', error)
         }
+      }
+
+      this.tocModal.addEventListener('click', buttonClickHandler)
+      this.eventCleanupFunctions.push(() => {
+        this.tocModal?.removeEventListener('click', buttonClickHandler)
       })
 
       // 初始化 TOC 内容
@@ -482,6 +475,12 @@ export default class MarkmapPlugin extends Plugin {
       logger('TOC 窗口显示成功')
     } catch (error) {
       logger(`TOC 窗口显示失败: ${error.message}`, 'error', error)
+      // 清理可能创建的元素
+      if (this.tocModal) {
+        this.tocModal.remove()
+        this.tocModal = undefined
+      }
+      throw error
     }
   }
 
@@ -519,7 +518,7 @@ export default class MarkmapPlugin extends Plugin {
         paddingX: 20,
         color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
         colorFreezeLevel: 2,
-        initialExpandLevel: 3
+        initialExpandLevel: this.settings.get('initialExpandLevel')
       })
 
       // 销毁旧实例
@@ -605,7 +604,8 @@ export default class MarkmapPlugin extends Plugin {
     if (!svg) return
 
     const currentScale = parseFloat(svg.dataset.scale || '1')
-    const newScale = currentScale * 1.2
+    const zoomStep = this.settings.get('zoomStep')
+    const newScale = currentScale + zoomStep
 
     svg.style.transform = `scale(${newScale})`
     svg.style.transformOrigin = 'center center'
@@ -620,7 +620,8 @@ export default class MarkmapPlugin extends Plugin {
     if (!svg) return
 
     const currentScale = parseFloat(svg.dataset.scale || '1')
-    const newScale = Math.max(currentScale / 1.2, 0.3) // 最小0.3倍
+    const zoomStep = this.settings.get('zoomStep')
+    const newScale = Math.max(currentScale - zoomStep, 0.1) // 最小0.1倍
 
     svg.style.transform = `scale(${newScale})`
     svg.style.transformOrigin = 'center center'
@@ -703,17 +704,15 @@ export default class MarkmapPlugin extends Plugin {
 
       // 节点高度通常比字体大小大一些（包含行高、padding等）
       // 经验值：节点高度约为字体大小的1.2-1.5倍
-      const estimatedNodeFontSize = nodeHeight / 2
+      const estimatedNodeFontSize = nodeHeight
 
       // 计算缩放比例
       const scale = documentSize / estimatedNodeFontSize
 
-      // 限制缩放范围在合理区间内
-      const clampedScale = Math.max(0.8, Math.min(scale, 8.0))
 
-      logger(`正文字体大小: ${documentSize}px, 节点高度: ${nodeHeight}px, 推算字体大小: ${estimatedNodeFontSize.toFixed(1)}px, 计算缩放: ${scale.toFixed(2)}, 最终缩放: ${clampedScale.toFixed(2)}`)
+      logger(`正文字体大小: ${documentSize}px, 节点高度: ${nodeHeight}px, 推算字体大小: ${estimatedNodeFontSize.toFixed(1)}px, 计算缩放: ${scale.toFixed(2)}, 最终缩放: ${scale.toFixed(2)}`)
 
-      return clampedScale
+      return scale
     } catch (error) {
       logger(`计算缩放比例失败: ${error.message}`, 'error')
       return 2.0 // 默认缩放
@@ -778,13 +777,18 @@ export default class MarkmapPlugin extends Plugin {
     if (!svg) return;
 
     // 绑定节点点击事件
-    svg.addEventListener('click', (e) => {
+    const clickHandler = (e: Event) => {
       const target = e.target as Element;
       const nodeEl = target.closest('.markmap-node');
 
       if (nodeEl) {
         this.scrollToHeadingByNode(nodeEl);
       }
+    };
+
+    svg.addEventListener('click', clickHandler);
+    this.eventCleanupFunctions.push(() => {
+      svg.removeEventListener('click', clickHandler);
     });
   }
 
@@ -855,65 +859,33 @@ export default class MarkmapPlugin extends Plugin {
     }
   }
 
-  insertMarkmapFence() {
-    const template = `\`\`\`\`markmap
----
-markmap:
-  zoom: false
-  pan: false
-  height: 300px
-  backgroundColor: "#f8f8f8"
-  spacingHorizontal: 80
-  spacingVertical: 20
-  fitRatio: 0.95
-  paddingX: 20
-  autoFit: true
----
 
-# 中心主题
-## 子主题 1
-- 要点 1
-- 要点 2
-## 子主题 2
-- 要点 1
-  - 详细内容
-- 要点 2
-\`\`\`\``
-
-    // 插入到编辑器
-    try {
-      logger('插入 Markmap 代码块模板')
-
-      // 使用简单的方式插入文本
-      const activeElement = document.activeElement
-      if (activeElement && (activeElement as any).insertText) {
-        (activeElement as any).insertText(template)
-        logger('代码块模板已插入')
-      } else {
-        // 备用方案：复制到剪贴板
-        navigator.clipboard.writeText(template).then(() => {
-          logger('模板已复制到剪贴板，请手动粘贴')
-        })
-      }
-    } catch (error) {
-      logger(`插入代码块失败: ${error.message}`, 'error', error)
-    }
-  }
 
   onunload() {
     logger('插件卸载')
 
-    // 清理资源
-    this.hideTocMarkmap()
+    try {
+      // 清理资源
+      this.hideTocMarkmap()
 
-    // 清理代码块实例
-    Object.values(this.mmOfCid).forEach(mm => {
-      if (mm && typeof mm.destroy === 'function') {
-        mm.destroy()
-      }
-    })
-    this.mmOfCid = {}
+      // 清理代码块实例
+      Object.values(this.mmOfCid).forEach(mm => {
+        if (mm && typeof mm.destroy === 'function') {
+          mm.destroy()
+        }
+      })
+      this.mmOfCid = {}
 
-    logger('Markmap 插件已卸载')
+      // 清理事件监听器
+      this.eventCleanupFunctions.forEach(cleanup => cleanup())
+      this.eventCleanupFunctions = []
+
+      // 重置状态
+      this.resourcesLoaded = false
+
+      logger('Markmap 插件已卸载')
+    } catch (error) {
+      logger(`插件卸载时出错: ${error.message}`, 'error', error)
+    }
   }
 }
