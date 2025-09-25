@@ -1,15 +1,9 @@
-import { Plugin, CodeblockPostProcessor, html } from '@typora-community-plugin/core'
+import { Plugin, CodeblockPostProcessor, html, debounce, until, format } from '@typora-community-plugin/core'
 import { Transformer, builtInPlugins } from 'markmap-lib'
 import { Markmap, loadCSS, loadJS, deriveOptions } from 'markmap-view'
 import * as yaml from 'js-yaml'
 import { logger } from './utils'
 
-// 定义简单的树节点接口
-interface TreeNode {
-  content: string
-  children: TreeNode[]
-  depth: number
-}
 
 // 定义 Markmap 配置接口
 interface MarkmapOptions {
@@ -422,15 +416,15 @@ export default class MarkmapPlugin extends Plugin {
     return content
   }
 
-  toggleTocMarkmap() {
-    if (this.tocModal) {
+  async toggleTocMarkmap() {
+    if (this.tocModal && this.tocModal.style.display !== 'none') {
       this.hideTocMarkmap()
     } else {
-      this.showTocMarkmap()
+      await this.showTocMarkmap()
     }
   }
 
-  showTocMarkmap() {
+  async showTocMarkmap() {
     logger('显示 TOC Markmap')
 
     try {
@@ -455,7 +449,7 @@ export default class MarkmapPlugin extends Plugin {
       document.body.appendChild(this.tocModal)
 
       // 绑定按钮事件
-      this.tocModal.addEventListener('click', (e) => {
+      this.tocModal.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement
         const action = target.getAttribute('data-action')
 
@@ -465,7 +459,7 @@ export default class MarkmapPlugin extends Plugin {
             break
           case 'refresh':
             logger('刷新 TOC')
-            this.updateTocMarkmap()
+            await this.updateTocMarkmap()
             break
           case 'zoom-in':
             this.zoomIn()
@@ -480,7 +474,7 @@ export default class MarkmapPlugin extends Plugin {
       })
 
       // 初始化 TOC 内容
-      this.updateTocMarkmap()
+      await this.updateTocMarkmap()
 
       // 初始化事件监听器
       this.initTocEventListeners()
@@ -491,7 +485,7 @@ export default class MarkmapPlugin extends Plugin {
     }
   }
 
-  updateTocMarkmap() {
+  async updateTocMarkmap() {
     if (!this.tocModal) return
 
     try {
@@ -501,7 +495,7 @@ export default class MarkmapPlugin extends Plugin {
       if (!svg) return
 
       // 获取文档标题
-      const headings = this.getDocumentHeadings()
+      const headings = await this.getDocumentHeadings()
       logger('文档标题:', 'debug', headings)
 
       if (headings.length === 0) {
@@ -562,7 +556,7 @@ export default class MarkmapPlugin extends Plugin {
     return markdown
   }
 
-  getDocumentHeadings() {
+  async getDocumentHeadings() {
     const headings: Array<{level: number, text: string, id: string}> = []
     const write = document.querySelector('#write')
     if (!write) return []
@@ -672,6 +666,7 @@ export default class MarkmapPlugin extends Plugin {
     if (targetElement) {
       // 计算合适的缩放比例
       const scale = this.calculateOptimalScale(targetElement, currentHeadingObj)
+      logger(`计算出的缩放比例: ${scale}`)
 
       // 获取节点在SVG中的实际位置
       const svgRect = svg.getBoundingClientRect()
@@ -687,13 +682,6 @@ export default class MarkmapPlugin extends Plugin {
       svg.dataset.scale = scale.toString()
 
       logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}，中心点: (${nodeX}, ${nodeY})`)
-    } else {
-      // 没找到对应节点时使用默认适应
-      const scale = 1.0
-      svg.style.transform = `scale(${scale})`
-      svg.style.transformOrigin = 'center center'
-      svg.dataset.scale = scale.toString()
-      logger(`未找到标题"${currentHeading}"对应的节点，使用默认适应视图`)
     }
   }
 
@@ -715,7 +703,7 @@ export default class MarkmapPlugin extends Plugin {
 
       // 节点高度通常比字体大小大一些（包含行高、padding等）
       // 经验值：节点高度约为字体大小的1.2-1.5倍
-      const estimatedNodeFontSize = nodeHeight / 1.3
+      const estimatedNodeFontSize = nodeHeight / 2
 
       // 计算缩放比例
       const scale = documentSize / estimatedNodeFontSize
