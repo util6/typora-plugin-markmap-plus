@@ -126,6 +126,9 @@ typora-community-plugin是新插件系统的源代码，迁移时如果要转换
 
 ### bug解决方案记录
 
+
+
+
 #### 使用markmap库在新插件系统下渲染不成功
 
 要点：
