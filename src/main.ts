@@ -4,6 +4,8 @@ import { Plugin, CodeblockPostProcessor, html, debounce, until, format, PluginSe
 import { Transformer, builtInPlugins } from 'markmap-lib'
 // 导入 markmap 视图库，用于渲染思维导图
 import { Markmap, loadCSS, loadJS, deriveOptions } from 'markmap-view'
+// 导入 d3-zoom 以编程方式控制缩放
+import { zoomIdentity, zoomTransform } from 'd3-zoom'
 // 导入 YAML 解析库，用于解析代码块前置参数
 import * as yaml from 'js-yaml'
 // 导入日志工具
@@ -545,45 +547,32 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
 
   /**
    * 放大思维导图
-   * 通过 CSS transform 实现简单的缩放功能
+   * 使用 d3-zoom 的 scaleBy API 实现，确保与画布状态同步
    */
   zoomIn() {
-    const svg = this.tocModal?.querySelector('.markmap-svg') as SVGElement
-    if (!svg) return
-
-    // 获取当前缩放比例，默认为1
-    const currentScale = parseFloat(svg.dataset.scale || '1')
-    const zoomStep = this.settings.get('zoomStep')
-    const newScale = currentScale + zoomStep
-
-    // 应用新的缩放比例
-    svg.style.transform = `scale(${newScale})`
-    svg.style.transformOrigin = 'center center'
-    svg.dataset.scale = newScale.toString()
-
-    logger(`放大到: ${newScale}倍`)
+    if (this.tocMarkmap) {
+      const zoomStep = this.settings.get('zoomStep') ?? 0.2
+      this.tocMarkmap.svg
+        .transition()
+        .duration(250)
+        .call(this.tocMarkmap.zoom.scaleBy, 1 + zoomStep)
+      logger('放大')
+    }
   }
 
   /**
    * 缩小思维导图
-   * 通过 CSS transform 实现简单的缩放功能
+   * 使用 d3-zoom 的 scaleBy API 实现，确保与画布状态同步
    */
   zoomOut() {
-    const svg = this.tocModal?.querySelector('.markmap-svg') as SVGElement
-    if (!svg) return
-
-    // 获取当前缩放比例，默认为1
-    const currentScale = parseFloat(svg.dataset.scale || '1')
-    const zoomStep = this.settings.get('zoomStep')
-    // 设置最小缩放比例为0.1，避免过度缩小
-    const newScale = Math.max(currentScale - zoomStep, 0.1)
-
-    // 应用新的缩放比例
-    svg.style.transform = `scale(${newScale})`
-    svg.style.transformOrigin = 'center center'
-    svg.dataset.scale = newScale.toString()
-
-    logger(`缩小到: ${newScale}倍`)
+    if (this.tocMarkmap) {
+      const zoomStep = this.settings.get('zoomStep') ?? 0.2
+      this.tocMarkmap.svg
+        .transition()
+        .duration(250)
+        .call(this.tocMarkmap.zoom.scaleBy, 1 / (1 + zoomStep))
+      logger('缩小')
+    }
   }
 
   /**
@@ -683,18 +672,14 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
    * @param event 鼠标事件（可选）
    */
   fitToMousePosition(event?: MouseEvent) {
-    if (!this.tocModal) return
+    if (!this.tocMarkmap || !this.tocModal) return
 
     const svg = this.tocModal.querySelector('.markmap-svg') as SVGElement
     if (!svg) return
 
-    // 获取当前编辑器中可见的标题
     const currentHeadingObj = this.getCurrentVisibleHeading()
     if (!currentHeadingObj) {
-      // 没有找到当前标题，使用默认适应
-      svg.style.transform = 'scale(10.0)'
-      svg.style.transformOrigin = 'center center'
-      svg.dataset.scale = '10.0'
+      this.tocMarkmap.fit()
       logger('未找到当前标题，使用默认适应视图')
       return
     }
@@ -702,11 +687,9 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
     const currentHeading = currentHeadingObj.text
     logger(`当前可见标题: "${currentHeading}"`)
 
-    // 在思维导图中找到对应的节点
     const nodeElements = svg.querySelectorAll('g > foreignObject')
     let targetElement = null
 
-    // 遍历所有节点，查找匹配的标题
     for (const nodeEl of Array.from(nodeElements)) {
       const textContent = nodeEl.textContent?.trim() || ''
       if (textContent === currentHeading) {
@@ -717,24 +700,30 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
     }
 
     if (targetElement) {
-      // 计算合适的缩放比例，使节点文字大小与正文相匹配
-      const scale = this.calculateOptimalScale(targetElement, currentHeadingObj)
+      const transform = zoomTransform(svg)
+      const scale = this.calculateOptimalScale(targetElement, currentHeadingObj, transform.k)
       logger(`计算出的缩放比例: ${scale}`)
 
-      // 获取节点在SVG中的实际位置
       const svgRect = svg.getBoundingClientRect()
       const nodeRect = targetElement.getBoundingClientRect()
 
-      // 计算节点相对于SVG的中心位置
-      const nodeX = nodeRect.left - svgRect.left + nodeRect.width / 2
-      const nodeY = nodeRect.top - svgRect.top + nodeRect.height / 2
+      // 在未缩放的SVG坐标系中，计算节点的中心点
+      const originalNodeX = (nodeRect.left - svgRect.left - transform.x) / transform.k + nodeRect.width / (2 * transform.k)
+      const originalNodeY = (nodeRect.top - svgRect.top - transform.y) / transform.k + nodeRect.height / (2 * transform.k)
 
-      // 设置缩放和变换原点
-      svg.style.transform = `scale(${scale})`
-      svg.style.transformOrigin = `${nodeX}px ${nodeY}px`
-      svg.dataset.scale = scale.toString()
+      // 构建新的变换
+      const newTransform = zoomIdentity
+        .translate(svg.clientWidth / 2, svg.clientHeight / 2) // 1. 将视口中心作为原点
+        .scale(scale) // 2. 应用新的缩放比例
+        .translate(-originalNodeX, -originalNodeY) // 3. 将目标节点的原始坐标移动到原点
 
-      logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}，中心点: (${nodeX}, ${nodeY})`)
+      // 使用 D3 API 以动画方式应用新变换
+      this.tocMarkmap.svg
+        .transition()
+        .duration(500)
+        .call(this.tocMarkmap.zoom.transform, newTransform)
+
+      logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}`)
     }
   }
 
@@ -743,9 +732,10 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
    * 使思维导图节点的文字大小与正文文字大小相匹配
    * @param nodeElement 目标节点元素
    * @param headingObj 标题对象信息
+   * @param currentScale 当前D3的缩放系数
    * @returns number 计算出的缩放比例
    */
-  calculateOptimalScale(nodeElement: Element, headingObj: any) {
+  calculateOptimalScale(nodeElement: Element, headingObj: any, currentScale: number) {
     try {
       // 获取正文内容区域
       const writeElement = document.querySelector('#write')
@@ -760,14 +750,14 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       const nodeRect = nodeElement.getBoundingClientRect()
       const nodeHeight = nodeRect.height
 
-      // 节点高度通常比字体大小大一些（包含行高、padding等）
-      // 经验值：节点高度约为字体大小的1.2-1.5倍
-      const estimatedNodeFontSize = nodeHeight
+      // 将当前渲染高度根据D3的缩放系数归一化，得到节点在1倍缩放下的“真实”高度
+      const nodeHeightAtScale1 = nodeHeight / currentScale
 
-      // 计算缩放比例：正文字体大小 / 节点字体大小
-      const scale = documentSize / estimatedNodeFontSize
+      // 核心逻辑：计算需要的新缩放比例，使得节点的“真实”高度缩放后约等于正文字体大小
+      // 这里的 nodeHeightAtScale1 约等于节点的基础字体大小，因此 scale ≈ documentSize / baseFontSize
+      const scale = documentSize / nodeHeightAtScale1
 
-      logger(`正文字体大小: ${documentSize}px, 节点高度: ${nodeHeight}px, 推算字体大小: ${estimatedNodeFontSize.toFixed(1)}px, 计算缩放: ${scale.toFixed(2)}, 最终缩放: ${scale.toFixed(2)}`)
+      logger(`正文字体: ${documentSize.toFixed(1)}px, 节点测量高度: ${nodeHeight.toFixed(1)}px, 当前缩放: ${currentScale.toFixed(2)}, 节点真实高度: ${nodeHeightAtScale1.toFixed(1)}px, 计算新缩放: ${scale.toFixed(2)}`)
 
       return scale
     } catch (error) {
