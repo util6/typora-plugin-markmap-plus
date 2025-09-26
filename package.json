@@ -8,7 +8,9 @@
   "scripts": {
     "build:dev": "node build.js",
     "build": "rollup -c rollup.config.js",
-    "package": "npm run build && node pack.cjs",
+    "build:online": "NODE_ENV=production rollup -c rollup.config.js",
+    "package": "npm run build:online",
+    "clean": "rm -rf dist release",
     "dev": "node build.js",
     "test": "node build.js && echo 'Plugin built and installed. Please test in Typora.'",
     "deploy": "./deploy.sh",
@@ -31,6 +33,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.4",
+    "@rollup/plugin-strip": "^3.0.4",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.5",
     "@rollup/plugin-virtual": "^3.0.2",
