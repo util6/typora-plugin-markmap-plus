@@ -4,7 +4,7 @@
   "description": "Use Markmap in Typora - Create interactive mind maps from markdown content.",
   "author": "util6",
   "authorUrl": "https://github.com/util6",
-  "repo": "typora-community-plugin/typora-plugin-markmap",
+  "repo": "util6/typora-plugin-markmap-plus",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "minCoreVersion": "2.3.33",
