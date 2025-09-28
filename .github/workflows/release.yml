@@ -28,15 +28,11 @@ jobs:
       run: |
         cd dist
         zip -r ../typora-plugin-markmap-plus-${{ github.ref_name }}.zip .
+        cd ..
+        ls -la *.zip
     
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
-        name: Release ${{ github.ref_name }}
-        tag_name: ${{ github.ref_name }}
         files: typora-plugin-markmap-plus-${{ github.ref_name }}.zip
         generate_release_notes: true
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
