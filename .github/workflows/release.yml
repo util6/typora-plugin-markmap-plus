@@ -27,12 +27,12 @@ jobs:
     - name: Create release package
       run: |
         cd dist
-        zip -r ../typora-plugin-markmap-${{ github.ref_name }}.zip .
+        zip -r ../typora-plugin-markmap-plus-${{ github.ref_name }}.zip .
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: typora-plugin-markmap-${{ github.ref_name }}.zip
+        files: typora-plugin-markmap-plus-${{ github.ref_name }}.zip
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

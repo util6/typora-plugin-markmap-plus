@@ -1,4 +1,4 @@
-# Typora Markmap Plugin
+# Typora Markmap Plus Plugin
 
 一个功能强大的 Typora 插件，让你能够在 Typora 中创建和查看交互式思维导图。
 
