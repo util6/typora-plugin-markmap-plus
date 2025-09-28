@@ -32,7 +32,11 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        name: Release ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         files: typora-plugin-markmap-plus-${{ github.ref_name }}.zip
         generate_release_notes: true
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
