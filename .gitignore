@@ -55,7 +55,6 @@ GEMINI.md
 CLAUDE.md
 .clinerules-*
 
-/package-lock.json
 test
 /node_modules
 /.git
