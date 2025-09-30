@@ -13,13 +13,16 @@ fi
 VERSION=$1
 echo "🚀 开始发布版本 v$VERSION"
 
-# 1. 更新 package.json 版本号
+# 1. 更新 package.json 和 manifest.json 版本号
 echo "📝 更新版本号到 $VERSION"
 npm version $VERSION --no-git-tag-version
 
+# 更新 manifest.json 中的版本号
+sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src/manifest.json
+
 # 2. 提交版本更改
 echo "📤 提交版本更改"
-git add package.json package-lock.json
+git add package.json package-lock.json src/manifest.json
 git commit -m "chore: bump version to v$VERSION"
 git push origin main
 
