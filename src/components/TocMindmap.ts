@@ -1,15 +1,93 @@
 
 
-// 导入 markmap 核心库
-import { Transformer } from 'markmap-lib';
+import * as yaml from 'js-yaml'
+import { Transformer, type ITransformPlugin, builtInPlugins } from 'markmap-lib';
 import { Markmap, deriveOptions } from 'markmap-view';
-// 导入 d3-zoom 以编程方式控制缩放
 import { zoomIdentity, zoomTransform } from 'd3-zoom';
-// 导入 @typora-community-plugin/core 的 PluginSettings
-import { PluginSettings } from '@typora-community-plugin/core';
-// 导入设置和日志工具
+import { PluginSettings, debounce } from '@typora-community-plugin/core';
+import { editor } from 'typora'
 import { MarkmapSettings } from '../settings';
 import { logger } from '../utils';
+
+// =======================================================
+// MARKMAP RENDERER INTEGRATION
+// =======================================================
+
+const resolveImagePath: ITransformPlugin = {
+  name: 'resolveImagePath',
+  transform(ctx) {
+    ctx.parser.tap(md => {
+      const defaultRender = function (tokens: any, idx: number, options: any, env: any, self: any) {
+        return self.renderToken(tokens, idx, options)
+      }
+
+      const defaultImageRender = md.renderer.rules.image || defaultRender
+
+      md.renderer.rules.image = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
+        const token = tokens[idx]
+
+        const src = token.attrGet('src')
+        if (src) {
+          token.attrSet('src', editor.imgEdit.getRealSrc(src))
+        }
+
+        return defaultImageRender(tokens, idx, options, env, self)
+      }
+
+      const defaultHtmlInlineRender = md.renderer.rules.html_inline || defaultRender
+
+      md.renderer.rules.html_inline = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
+        const token = tokens[idx] as { content: string }
+
+        if (token.content.startsWith('<img')) {
+          token.content = token.content.replace(/ src=(["'])([^'"]+)\1/, (_, __, $relativePath) => {
+            return ` src="${editor.imgEdit.getRealSrc($relativePath)}"`
+          })
+        }
+
+        return defaultHtmlInlineRender(tokens, idx, options, env, self)
+      }
+    })
+    return {}
+  }
+}
+
+const RE_FRONT_MATTER = /^---\s*\n([\s\S]+?)\n---\s*\n?/
+
+function parseMarkdown(md: string) {
+  let frontMatter = ''
+
+  const content = md
+    .replace(RE_FRONT_MATTER, (_, $1) => {
+      frontMatter = $1
+      return ''
+    })
+
+  return { frontMatter, content }
+}
+
+function renderMarkmap(options: {
+  globalOptions: string,
+  markdown: string,
+  getMarkmap(): Markmap,
+}) {
+  setTimeout(() => {
+    const { frontMatter, content } = parseMarkdown(options.markdown)
+    const globalOpts = yaml.load(options.globalOptions) ?? {}
+    const fronMatterJson = yaml.load(frontMatter) ?? {} as any
+    const localOpts = fronMatterJson.markmap ?? fronMatterJson
+    const jsonOpts = { ...globalOpts, ...localOpts }
+    const opts = deriveOptions(jsonOpts)
+    const mm = options.getMarkmap()
+    mm.setOptions(opts)
+
+    const { root } = new Transformer([...builtInPlugins, resolveImagePath]).transform(content)
+    mm.setData(root)
+
+    mm.fit(1)
+  })
+  return
+}
 
 // =======================================================
 // STYLE BLOCK (等效于 <style> 标签)
@@ -94,7 +172,7 @@ const COMPONENT_STYLE = `
 // =======================================================
 const COMPONENT_TEMPLATE = `
   <div class="markmap-toc-header">
-    <span class="markmap-toc-title">目录思维导图</span>
+    <span class="markmap-toc-title"></span>
     <div class="markmap-toc-buttons">
       <button class="markmap-toc-btn" data-action="dock-left" title="嵌入侧边栏">📌</button>
       <button class="markmap-toc-btn" data-action="zoom-in" title="放大">🔍+</button>
@@ -117,9 +195,9 @@ export class TocMindmapComponent {
 
   // 依赖注入：从父组件获取所需的 "props"
   constructor(
-    private settings: PluginSettings<MarkmapSettings>,
-    private transformer: Transformer
+    private settings: PluginSettings<MarkmapSettings>
   ) {
+    this.transformer = new Transformer([...builtInPlugins, resolveImagePath]);
     this._injectStyle();
   }
 
@@ -129,7 +207,12 @@ export class TocMindmapComponent {
     markmap: null as any | null,
     isEmbedded: false,
     resizeObserver: null as ResizeObserver | null,
+    contentObserver: null as MutationObserver | null,
+    lastHeadingsHash: '',
   };
+
+  private transformer: Transformer;
+  private debouncedUpdate = debounce(this._handleContentChange.bind(this), 300);
 
   // 模拟计算属性，类似 Vue 的 computed
   get isVisible(): boolean {
@@ -145,6 +228,7 @@ export class TocMindmapComponent {
     try {
       this._createElement();
       this._attachEventListeners();
+      this._initRealTimeUpdate();
       await this._update();
       logger('TOC 窗口显示成功');
     } catch (error) {
@@ -162,12 +246,15 @@ export class TocMindmapComponent {
 
     // 清理所有事件监听和观察器
     this._cleanupEventListeners();
+    this._cleanupRealTimeUpdate();
     this.state.resizeObserver?.disconnect();
 
     // 重置状态
     this.state.element = null;
     this.state.markmap = null;
     this.state.resizeObserver = null;
+    this.state.contentObserver = null;
+    this.state.lastHeadingsHash = '';
 
     logger('TOC 窗口已关闭');
   }
@@ -265,6 +352,8 @@ export class TocMindmapComponent {
     svg.innerHTML = '';
 
     const headings = await this._getDocumentHeadings();
+    this.state.lastHeadingsHash = this._getHeadingsHash(headings);
+
     if (headings.length === 0) {
       this._renderEmpty(svg);
       return;
@@ -519,5 +608,48 @@ export class TocMindmapComponent {
 
   private _renderError(svg: SVGElement, message: string) {
     svg.innerHTML = `<text x="10" y="20" fill="red">渲染错误: ${message}</text>`;
+  }
+
+  // --- 实时更新相关方法 ---
+
+  private _initRealTimeUpdate() {
+    if (!this.settings.get('enableRealTimeUpdate')) return;
+
+    const writeElement = document.querySelector('#write');
+    if (!writeElement) return;
+
+    this.state.contentObserver = new MutationObserver(this.debouncedUpdate);
+    this.state.contentObserver.observe(writeElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    logger('实时更新监听器已启动');
+  }
+
+  private _cleanupRealTimeUpdate() {
+    if (this.state.contentObserver) {
+      this.state.contentObserver.disconnect();
+      this.state.contentObserver = null;
+      logger('实时更新监听器已清理');
+    }
+  }
+
+  private async _handleContentChange() {
+    if (!this.isVisible) return;
+
+    const headings = await this._getDocumentHeadings();
+    const currentHash = this._getHeadingsHash(headings);
+
+    if (currentHash !== this.state.lastHeadingsHash) {
+      logger('检测到标题结构变化，更新思维导图');
+      this.state.lastHeadingsHash = currentHash;
+      await this._update();
+    }
+  }
+
+  private _getHeadingsHash(headings: Array<{level: number, text: string, id: string}>): string {
+    return headings.map(h => `${h.level}:${h.text}`).join('|');
   }
 }

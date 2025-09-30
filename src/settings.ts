@@ -6,6 +6,7 @@ export interface MarkmapSettings {
   tocWindowHeight: number
   initialExpandLevel: number
   zoomStep: number
+  enableRealTimeUpdate: boolean
 }
 
 export const SETTING_CONSTRAINTS = {
@@ -19,7 +20,8 @@ export const DEFAULT_SETTINGS: MarkmapSettings = {
   tocWindowWidth: SETTING_CONSTRAINTS.tocWindowWidth.default,
   tocWindowHeight: SETTING_CONSTRAINTS.tocWindowHeight.default,
   initialExpandLevel: SETTING_CONSTRAINTS.initialExpandLevel.default,
-  zoomStep: SETTING_CONSTRAINTS.zoomStep.default
+  zoomStep: SETTING_CONSTRAINTS.zoomStep.default,
+  enableRealTimeUpdate: true
 }
 
 export class MarkmapSettingTab extends SettingTab {
@@ -88,6 +90,15 @@ export class MarkmapSettingTab extends SettingTab {
             this.settings.set('zoomStep', value)
           }
         }
+      })
+    })
+
+    this.addSetting(item => {
+      item.addName('实时更新')
+      item.addDescription('编辑文档时自动更新思维导图')
+      item.addCheckbox((checkbox) => {
+        checkbox.checked = this.settings.get('enableRealTimeUpdate')
+        checkbox.onchange = () => this.settings.set('enableRealTimeUpdate', checkbox.checked)
       })
     })
   }

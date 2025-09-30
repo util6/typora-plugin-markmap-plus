@@ -18,7 +18,6 @@ import { TocMindmapComponent } from './components/TocMindmap'
 export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
 
   // ==================== 核心组件 ====================
-  private transformer: Transformer;
   private tocMindmapComponent: TocMindmapComponent;
 
   // ==================== 界面元素 ====================
@@ -40,17 +39,14 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       this.settings.load();
       this.registerSettingTab(new MarkmapSettingTab(this.settings));
 
-      // 2. 初始化核心转换器
-      this.transformer = new Transformer(builtInPlugins);
-
-      // 3. 异步加载 Markmap 核心资源
+      // 2. 异步加载 Markmap 核心资源
       await this.initResources();
 
-      // 4. 初始化 TOC 思维导图组件 (子组件)
-      this.tocMindmapComponent = new TocMindmapComponent(this.settings, this.transformer);
+      // 3. 初始化 TOC 思维导图组件 (子组件)
+      this.tocMindmapComponent = new TocMindmapComponent(this.settings);
       this.register(() => this.tocMindmapComponent.destroy()); // 注册卸载时的清理
 
-      // 5. 初始化悬浮按钮 (父组件的 UI)
+      // 4. 初始化悬浮按钮 (父组件的 UI)
       this.initFloatingButton();
 
       logger('插件加载完成 🚀');
@@ -69,7 +65,8 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
 
     logger('开始初始化 Markmap 资源');
     try {
-      const { styles, scripts } = this.transformer.getAssets();
+      const transformer = new Transformer(builtInPlugins);
+      const { styles, scripts } = transformer.getAssets();
       if (styles) await loadCSS(styles);
       if (scripts) await loadJS(scripts);
       this.resourcesLoaded = true;
