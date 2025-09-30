@@ -34,6 +34,7 @@ dist/
 build/
 out/
 release/
+test/
 plugin.zip
 *.zip
 
