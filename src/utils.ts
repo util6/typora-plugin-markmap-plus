@@ -9,8 +9,22 @@ export const isWindows = () => navigator.platform.includes('Win')
 
 // 调试配置
 const DEBUG_CONFIG = {
-  enabled: true, // 可以通过环境变量或配置文件控制
-  showInPage: isMacOS(), // macOS 下显示页面消息，Windows 下依赖 console
+  enabled: true,
+  showInPage: isMacOS(),
+  showTimestamp: true,
+  autoRemoveDelay: {
+    info: 10000,
+    warn: 4000,
+    error: 6000,
+    debug: 2000
+  },
+  colors: {
+    info: '#2196F3',
+    warn: '#FF9800',
+    error: '#f44336',
+    debug: '#9C27B0'
+  },
+  copySuccessColor: '#4CAF50',
   logLevel: 'info' as 'debug' | 'info' | 'warn' | 'error'
 }
 
@@ -21,8 +35,8 @@ const DEBUG_CONFIG = {
 export function logger(message: string, level: 'debug' | 'info' | 'warn' | 'error' = 'info', data?: any) {
   if (!DEBUG_CONFIG.enabled) return
 
-  const timestamp = new Date().toLocaleTimeString()
-  const fullMessage = `[${timestamp}] [MARKMAP-${level.toUpperCase()}] ${message}`
+  const timestamp = DEBUG_CONFIG.showTimestamp ? new Date().toLocaleTimeString() : ''
+  const fullMessage = timestamp ? `[${timestamp}] [MARKMAP-${level.toUpperCase()}] ${message}` : `[MARKMAP-${level.toUpperCase()}] ${message}`
 
   // 始终输出到 console（即使在 macOS 下可能看不到）
   const consoleFn = console[level] || console.log
@@ -43,13 +57,6 @@ export function logger(message: string, level: 'debug' | 'info' | 'warn' | 'erro
  */
 function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'info') {
   const messageDiv = document.createElement('div')
-
-  const colors = {
-    info: '#2196F3',
-    warn: '#FF9800',
-    error: '#f44336'
-  }
-
   const existingMessages = document.querySelectorAll('[data-debug-message]')
   const topOffset = 10 + (existingMessages.length * 40)
 
@@ -57,7 +64,7 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
     position: fixed;
     top: ${topOffset}px;
     right: 10px;
-    background: ${colors[type]};
+    background: ${DEBUG_CONFIG.colors[type]};
     color: white;
     padding: 6px 10px;
     border-radius: 4px;
@@ -68,13 +75,27 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
     word-wrap: break-word;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     line-height: 1.4;
+    cursor: pointer;
   `
   messageDiv.setAttribute('data-debug-message', 'true')
   messageDiv.textContent = message
+
+  // 点击复制功能
+  messageDiv.addEventListener('click', () => {
+    navigator.clipboard.writeText(message).then(() => {
+      messageDiv.style.background = DEBUG_CONFIG.copySuccessColor
+      messageDiv.textContent = '已复制到剪贴板'
+      setTimeout(() => {
+        messageDiv.textContent = message
+        messageDiv.style.background = DEBUG_CONFIG.colors[type]
+      }, 1000)
+    })
+  })
+
   document.body.appendChild(messageDiv)
 
   // 自动移除
-  const timeout = type === 'error' ? 6000 : 3000
+  const timeout = DEBUG_CONFIG.autoRemoveDelay[type]
   setTimeout(() => {
     if (messageDiv.parentNode) {
       messageDiv.remove()

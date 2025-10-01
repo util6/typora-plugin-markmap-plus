@@ -22,8 +22,8 @@ TYPORA_PLUGINS_ROOT_DIR=~/"Library/Application Support/abnerworks.Typora/plugins
 
 # --- 1. 构建项目 ---
 cd "$PROJECT_DIR"
-echo "📦 正在构建项目 (yarn package)..."
-yarn package # 不再抑制输出，以便在构建失败时看到错误信息
+echo "📦 正在构建项目 (yarn build)..."
+yarn build # 使用开发构建，保留 logger
 
 # --- 2. 获取插件名称并确定目标路径 ---
 MANIFEST_FILE="$RELEASE_DIR/manifest.json"
