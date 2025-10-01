@@ -55,6 +55,7 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "interactjs": "^1.10.27",
     "js-yaml": "^4.1.0",
     "katex": "^0.16.19",
     "markmap-common": "^0.17.0",

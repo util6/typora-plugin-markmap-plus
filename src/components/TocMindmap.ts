@@ -1,5 +1,17 @@
+/**
+ * Typora Markmap Plus 插件 - TOC 思维导图组件
+ * 
+ * 功能说明：
+ * - 为当前文档的标题生成交互式思维导图
+ * - 支持窗口拖动和调整大小（基于 InteractJS）
+ * - 支持嵌入侧边栏模式
+ * - 提供实时更新和节点点击跳转功能
+ * 
+ * @author util6
+ * @version 1.0.3
+ */
 
-
+// ==================== 依赖导入 ====================
 import * as yaml from 'js-yaml'
 import { Transformer, type ITransformPlugin, builtInPlugins } from 'markmap-lib';
 import { Markmap, deriveOptions } from 'markmap-view';
@@ -8,15 +20,18 @@ import { PluginSettings, debounce } from '@typora-community-plugin/core';
 import { editor } from 'typora'
 import { MarkmapSettings } from '../settings';
 import { logger } from '../utils';
+import interact from 'interactjs';
 
-// =======================================================
-// MARKMAP RENDERER INTEGRATION
-// =======================================================
+// ==================== MARKMAP 渲染器集成 ====================
 
+/**
+ * 图片路径解析插件
+ * 将 Markdown 中的相对路径图片转换为 Typora 可识别的绝对路径
+ */
 const resolveImagePath: ITransformPlugin = {
   name: 'resolveImagePath',
   transform(ctx) {
-    ctx.parser.tap(md => {
+    ctx.parser.tap((md: any) => {
       const defaultRender = function (tokens: any, idx: number, options: any, env: any, self: any) {
         return self.renderToken(tokens, idx, options)
       }
@@ -77,7 +92,7 @@ function renderMarkmap(options: {
     const fronMatterJson = yaml.load(frontMatter) ?? {} as any
     const localOpts = fronMatterJson.markmap ?? fronMatterJson
     const jsonOpts = { ...globalOpts, ...localOpts }
-    const opts = deriveOptions(jsonOpts)
+    const opts = deriveOptions(jsonOpts as any)
     const mm = options.getMarkmap()
     mm.setOptions(opts)
 
@@ -93,13 +108,12 @@ function renderMarkmap(options: {
 // STYLE BLOCK (等效于 <style> 标签)
 // =======================================================
 const COMPONENT_STYLE = `
-  /* TOC 弹窗默认（悬浮）样式 */
   .markmap-toc-modal {
     position: fixed;
     top: 50px;
     right: 20px;
-    width: 450px; /* 将由JS动态设置 */
-    height: 500px; /* 将由JS动态设置 */
+    width: 450px;
+    height: 500px;
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -108,9 +122,13 @@ const COMPONENT_STYLE = `
     display: flex;
     flex-direction: column;
     font-family: system-ui, -apple-system, sans-serif;
-    resize: both;
     overflow: hidden;
-    transition: all 0.3s ease;
+    user-select: none;
+  }
+
+  .markmap-content, .markmap-svg {
+    pointer-events: auto;
+    user-select: none;
   }
 
   /* TOC 弹窗嵌入侧边栏时的样式 */
@@ -241,6 +259,11 @@ export class TocMindmapComponent {
   public hide = () => {
     if (!this.isVisible) return;
 
+    // 清理 InteractJS 实例
+    if (this.state.element) {
+      interact(this.state.element).unset();
+    }
+
     this.state.element?.remove();
     this.state.markmap?.destroy();
 
@@ -283,6 +306,43 @@ export class TocMindmapComponent {
     container.innerHTML = COMPONENT_TEMPLATE;
     document.body.appendChild(container);
     this.state.element = container;
+    this._setupInteractJS();
+  }
+
+  private _setupInteractJS() {
+    if (!this.state.element) return;
+
+    interact(this.state.element)
+      .draggable({
+        allowFrom: '.markmap-toc-header',
+        ignoreFrom: '.markmap-svg, .markmap-content',
+        listeners: {
+          move: (event) => {
+            const target = event.target;
+            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+            
+            target.style.transform = `translate(${x}px, ${y}px)`;
+            target.setAttribute('data-x', x.toString());
+            target.setAttribute('data-y', y.toString());
+          }
+        }
+      })
+      .resizable({
+        edges: { left: true, right: true, bottom: true, top: true },
+        listeners: {
+          move: (event) => {
+            const target = event.target;
+            target.style.width = `${event.rect.width}px`;
+            target.style.height = `${event.rect.height}px`;
+            target.style.left = `${event.rect.left}px`;
+            target.style.top = `${event.rect.top}px`;
+            target.style.transform = 'none';
+            target.removeAttribute('data-x');
+            target.removeAttribute('data-y');
+          }
+        }
+      });
   }
 
   private _injectStyle() {
@@ -301,8 +361,9 @@ export class TocMindmapComponent {
       if (!this.state.element) return;
 
       // 使用单一事件委托模式，在组件根元素上监听所有点击
-      this.state.element.addEventListener('click', this._handleModalClick);
-      this._eventCleanupFunctions.push(() => this.state.element?.removeEventListener('click', this._handleModalClick));
+      const boundHandler = this._handleModalClick.bind(this);
+      this.state.element.addEventListener('click', boundHandler);
+      this._eventCleanupFunctions.push(() => this.state.element!.removeEventListener('click', boundHandler));
     }
 
     private _cleanupEventListeners() {
