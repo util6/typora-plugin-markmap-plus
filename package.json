@@ -1,20 +1,17 @@
 {
   "private": true,
   "name": "typora-plugin-markmap-plus",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Enhanced Typora plugin for creating interactive mind maps with advanced features and settings.",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build:dev": "node build.js",
-    "build": "rollup -c rollup.config.js",
-    "build:online": "NODE_ENV=production rollup -c rollup.config.js",
-    "package": "npm run build:online",
-    "clean": "rm -rf dist release",
     "dev": "node build.js",
-    "test": "node build.js && echo 'Plugin built and installed. Please test in Typora.'",
+    "build": "rollup -c rollup.config.js",
+    "build:prod": "NODE_ENV=production rollup -c rollup.config.js",
+    "clean": "rm -rf dist release",
     "deploy": "./deploy.sh",
-    "deploy:quick": "./quick-deploy.sh",
+    "deploy:prod": "./deploy.sh --prod",
     "release": "./release.sh"
   },
   "keywords": [
