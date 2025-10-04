@@ -52,16 +52,19 @@ logs/
 # TypeScript
 # Ignore build cache files.
 *.tsbuildinfo
-GEMINI.md
-CLAUDE.md
+
 .clinerules-*
 
 test
 /node_modules
 /.git
 
-.amazonq
-.specstory
-.spec-workflow
+.amazonq/
+.specstory/
+.spec-workflow/
+.claude/
+
+GEMINI.md
+CLAUDE.md
 
 

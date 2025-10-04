@@ -39,7 +39,7 @@
   - **缩放/平移导图**：在思维导图区域内滚动鼠标滚轮或拖动。
   - **跳转到标题**：点击思维导图中的任意一个节点。
 
-![typora_dir_new](docs/assets/插件预览图.png)
+![typora_dir_new](assets/插件预览图.png)
 
 
 
