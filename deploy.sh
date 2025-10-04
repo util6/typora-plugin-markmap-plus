@@ -8,10 +8,21 @@
 # 3. 在 Typora 插件目录中创建该目录。
 # 4. 将 `release/markmap` 目录下的所有构建产物复制到目标目录。
 # 5. 重启 Typora 应用。
+#
+# 使用方法:
+# ./deploy.sh          # 开发模式 (保留 logger)
+# ./deploy.sh --prod    # 生产模式 (移除 logger)
 
 set -e # 如果任何命令失败，立即退出脚本
 
-echo "🚀 开始快速部署 Markmap 插件..."
+# 检查模式参数
+PRODUCTION_MODE=false
+if [ "$1" = "--prod" ] || [ "$1" = "-p" ]; then
+    PRODUCTION_MODE=true
+    echo "🚀 开始生产模式部署 Markmap 插件 (无 logger)..."
+else
+    echo "🚀 开始开发模式部署 Markmap 插件 (保留 logger)..."
+fi
 
 # --- 路径定义 ---
 # 使用 `cd` 和 `pwd` 来获取脚本所在的绝对路径，增强可移植性
@@ -22,8 +33,13 @@ TYPORA_PLUGINS_ROOT_DIR=~/"Library/Application Support/abnerworks.Typora/plugins
 
 # --- 1. 构建项目 ---
 cd "$PROJECT_DIR"
-echo "📦 正在构建项目 (yarn build)..."
-yarn build # 使用开发构建，保留 logger
+if [ "$PRODUCTION_MODE" = true ]; then
+    echo "📦 正在构建项目 (生产模式)..."
+    yarn build:prod # 生产构建，移除 logger
+else
+    echo "📦 正在构建项目 (开发模式)..."
+    yarn build # 开发构建，保留 logger
+fi
 
 # --- 2. 获取插件名称并确定目标路径 ---
 MANIFEST_FILE="$RELEASE_DIR/manifest.json"
@@ -49,6 +65,11 @@ TARGET_DIR="$TYPORA_PLUGINS_ROOT_DIR/$PLUGIN_DIR_NAME"
 
 echo "✔️ 插件名称: '$PLUGIN_NAME'"
 echo "📂 目标目录: '$TARGET_DIR'"
+if [ "$PRODUCTION_MODE" = true ]; then
+    echo "🔧 构建模式: 生产模式 (无调试日志)"
+else
+    echo "🔧 构建模式: 开发模式 (包含调试日志)"
+fi
 
 # --- 3. 部署文件 ---
 echo "📋 正在准备部署..."
@@ -69,4 +90,8 @@ osascript -e 'quit app "Typora"' 2>/dev/null || true
 sleep 1 # 等待1秒确保应用完全退出
 open -a Typora
 
-echo "🎉 部署成功!"
+if [ "$PRODUCTION_MODE" = true ]; then
+    echo "🎉 生产模式部署成功! (无调试日志)"
+else
+    echo "🎉 开发模式部署成功! (包含调试日志)"
+fi

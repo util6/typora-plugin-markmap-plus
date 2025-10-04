@@ -21,6 +21,7 @@ import { logger } from './utils'
 import { MarkmapSettings, DEFAULT_SETTINGS, MarkmapSettingTab } from './settings'
 // 导入我们新建的组件
 import { TocMindmapComponent } from './components/TocMindmap'
+import { FloatingButtonComponent } from './components/FloatingButton'
 
 /**
  * Markmap 插件主类
@@ -32,9 +33,8 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
   /** TOC 思维导图组件实例 */
   private tocMindmapComponent: TocMindmapComponent;
 
-  // ==================== 界面元素 ====================
-  /** 右下角悬浮按钮元素 */
-  private floatingButton?: HTMLElement;
+  /** 悬浮按钮组件实例 */
+  private floatingButtonComponent: FloatingButtonComponent;
 
   // ==================== 状态管理 ====================
   /** 标记 Markmap 资源是否已加载 */
@@ -61,8 +61,12 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       this.tocMindmapComponent = new TocMindmapComponent(this.settings);
       this.register(() => this.tocMindmapComponent.destroy()); // 注册卸载时的清理
 
-      // 4. 初始化悬浮按钮（父组件的 UI）
-      this.initFloatingButton();
+      // 4. 初始化悬浮按钮组件
+      this.floatingButtonComponent = new FloatingButtonComponent(this.settings, () => {
+        this.tocMindmapComponent.toggle();
+      });
+      this.floatingButtonComponent.show();
+      this.register(() => this.floatingButtonComponent.destroy());
 
       logger('插件加载完成 🚀');
 
@@ -98,68 +102,6 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       logger(`加载 Markmap 资源失败: ${error.message}`, 'error', error);
       throw error; // 抛出错误，由 onload 的 catch 统一处理
     }
-  }
-
-  /**
-   * 初始化右下角悬浮按钮
-   * 提供快速访问思维导图功能的入口
-   */
-  initFloatingButton() {
-    logger('初始化悬浮按钮');
-
-    // 创建悬浮按钮元素
-    this.floatingButton = document.createElement('div');
-    this.floatingButton.className = 'markmap-floating-button';
-    this.floatingButton.title = '显示/隐藏目录思维导图 (Cmd+M)';
-    this.floatingButton.innerHTML = `<span style="font-size: 20px;">🗺️</span>`;
-
-    // 点击按钮时，调用子组件的 toggle 方法
-    this.floatingButton.addEventListener('click', () => {
-      this.tocMindmapComponent.toggle();
-    });
-
-    // 将按钮添加到页面
-    document.body.appendChild(this.floatingButton);
-
-    // 注入按钮所需的样式
-    const style = document.createElement('style');
-    style.id = 'markmap-plugin-styles';
-    style.innerHTML = `
-      /* 悬浮按钮样式 */
-      .markmap-floating-button {
-        position: fixed;
-        right: 20px;
-        bottom: 20px;
-        width: 48px;
-        height: 48px;
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 9998;
-        transition: background-color 0.2s;
-      }
-      
-      /* 悬浮按钮悬停效果 */
-      .markmap-floating-button:hover {
-        background-color: #f5f5f5;
-      }
-    `;
-    
-    // 避免重复添加样式
-    if (!document.getElementById(style.id)) {
-      document.head.appendChild(style);
-    }
-
-    // 注册清理函数，插件卸载时移除元素和样式
-    this.register(() => {
-      this.floatingButton?.remove();
-      style.remove();
-    });
   }
 
   /**
