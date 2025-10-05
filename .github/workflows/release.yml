@@ -14,7 +14,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      # 必须添加 fetch-depth: 0 来获取所有git历史，以便生成changelog
       with:
         fetch-depth: 0
     
@@ -27,11 +26,15 @@ jobs:
     - name: Install dependencies
       run: npm install
     
-    - name: Build and Package
-      # 运行 release 脚本来完成构建和打包
-      run: npm run release
+    - name: Build for Production
+      run: npm run build:prod
     
-    # 新增步骤：从此处的提交历史中生成更新日志
+    # 已改回：打包方式和你的原始版本保持一致
+    - name: Create Release Package
+      run: |
+        cd dist
+        zip -r ../plugin.zip .
+
     - name: Generate Changelog
       id: changelog
       uses: TriPSs/conventional-changelog-action@v5
@@ -41,6 +44,6 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: release/plugin.zip # 更新了压缩包的正确路径
-        # 变更：将上一步生成的 changelog 作为 release 的内容
+        # 已改回：路径和你的原始版本保持一致
+        files: plugin.zip
         body: ${{ steps.changelog.outputs.changelog }}
