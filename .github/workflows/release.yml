@@ -36,18 +36,16 @@ jobs:
         cd dist
         zip -r ../plugin.zip .
 
-    - name: Generate Changelog
+    # 已更换：使用一个更纯粹、只负责生成日志内容的Action
+    - name: Generate Release Body
       id: changelog
-      uses: TriPSs/conventional-changelog-action@v5
+      uses: cycjimmy/release-body-creator@v2
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        # 新增：跳过所有git提交和变基操作，只生成日志
-        skip-commit: 'true'
-        # 新增：我们只需要输出变量，不需要生成文件
-        output-file: 'false'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: plugin.zip
-        body: ${{ steps.changelog.outputs.changelog }}
+        # 使用新工具的输出变量 `release_body`
+        body: ${{ steps.changelog.outputs.release_body }}
