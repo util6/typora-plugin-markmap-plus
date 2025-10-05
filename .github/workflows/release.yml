@@ -10,44 +10,33 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: |
-        rm -f package-lock.json
-        npm install
-    
-    - name: Build for Production
-      run: npm run build:prod
-    
-    - name: Create Release Package
-      run: |
-        cd dist
-        zip -r ../plugin.zip .
+      - uses: actions/checkout@v4
 
-    # 已更换为官方的、更可靠的 Action
-    - name: Generate Changelog
-      id: changelog
-      uses: conventional-changelog/conventional-changelog-action@v5
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        # 我们只需要输出，不需要它生成 CHANGELOG.md 文件
-        output-file: "false"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: plugin.zip
-        # 使用这个 Action 的输出变量 `changelog`
-        body: ${{ steps.changelog.outputs.changelog }}
+      - name: Install dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Build
+        run: npm run package
+
+      - name: Create release package
+        run: |
+          cd dist
+          zip -r ../plugin.zip .
+          cd ..
+          ls -la *.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plugin.zip
+          generate_release_notes: true
