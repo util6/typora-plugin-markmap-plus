@@ -1,5 +1,7 @@
+# 自动发布工作流
 name: Release
 
+# 触发条件：当推送以 'v' 开头的标签时（如 v1.0.0）
 on:
   push:
     tags:
@@ -8,26 +10,32 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # 授予写入仓库内容的权限，用于创建 release
     permissions:
       contents: write
 
     steps:
+      # 检出代码
       - uses: actions/checkout@v4
 
+      # 设置 Node.js 环境
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
 
+      # 安装项目依赖
       - name: Install dependencies
         run: |
           rm -f package-lock.json
           npm install
 
+      # 构建生产版本
       - name: Build
-        run: npm run package
+        run: npm run build:prod
 
+      # 创建发布包
       - name: Create release package
         run: |
           cd dist
@@ -35,6 +43,7 @@ jobs:
           cd ..
           ls -la *.zip
 
+      # 创建 GitHub Release，自动生成更新说明
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
