@@ -11,7 +11,6 @@
  * @version 1.0.6
  */
 
-import { PluginSettings } from '@typora-community-plugin/core';
 import interact from 'interactjs';
 import { MarkmapSettings } from '../settings';
 import { logger } from '../utils';
@@ -73,7 +72,7 @@ export class FloatingButtonComponent {
    * @param onClick 点击按钮时的回调函数
    */
   constructor(
-    private settings: PluginSettings<MarkmapSettings>,
+    private settings: MarkmapSettings,
     private onClick: () => void,
   ) {
     // 注入CSS样式到页面
@@ -85,8 +84,14 @@ export class FloatingButtonComponent {
     element: null as HTMLElement | null, // 按钮DOM元素
   };
 
-  /** 设置变化监听器的清理函数数组 */
-  private _settingsListenersDisposers: (() => void)[] = [];
+  /**
+   * 更新组件设置
+   * @param newSettings 新的设置对象
+   */
+  public updateSettings(newSettings: MarkmapSettings) {
+    this.settings = newSettings;
+    this.render();
+  }
 
   /**
    * 显示悬浮按钮
@@ -106,11 +111,6 @@ export class FloatingButtonComponent {
     
     // 设置拖拽功能
     this._setupInteractJS();
-
-    // 监听设置变化，实时更新按钮
-    const sizeListener = this.settings.onChange('floatingButtonSize', () => this.render());
-    const iconListener = this.settings.onChange('floatingButtonIconSvg', () => this.render());
-    this._settingsListenersDisposers.push(sizeListener, iconListener);
   }
 
   /**
@@ -119,10 +119,6 @@ export class FloatingButtonComponent {
    */
   public hide = () => {
     if (!this.state.element) return;
-
-    // 注销所有设置变化监听器
-    this._settingsListenersDisposers.forEach(disposer => disposer());
-    this._settingsListenersDisposers = [];
 
     // 清理拖拽功能
     interact(this.state.element).unset();
@@ -150,13 +146,13 @@ export class FloatingButtonComponent {
     if (!this.state.element) return;
 
     // 从设置中获取按钮大小并应用
-    const size = this.settings.get('floatingButtonSize');
+    const size = this.settings.floatingButtonSize;
     this.state.element.style.width = `${size}px`;
     this.state.element.style.height = `${size}px`;
 
     // 从设置中获取SVG图标代码并直接插入
     // 让SVG直接成为flex容器的子元素，确保正确居中
-    this.state.element.innerHTML = this.settings.get('floatingButtonIconSvg');
+    this.state.element.innerHTML = this.settings.floatingButtonIconSvg;
   }
 
   /**

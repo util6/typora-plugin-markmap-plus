@@ -51,22 +51,41 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       // 1. 初始化插件设置系统
       this.registerSettings(new PluginSettings(this.app, this.manifest, { version: 1 }));
       this.settings.setDefault(DEFAULT_SETTINGS);
-      this.settings.load();
+      await this.settings.load();
       this.registerSettingTab(new MarkmapSettingTab(this.settings));
 
       // 2. 异步加载 Markmap 核心资源（CSS 和 JS）
       await this.initResources();
 
       // 3. 初始化 TOC 思维导图组件（子组件）
-      this.tocMindmapComponent = new TocMindmapComponent(this.settings);
+      const settingsObj = {} as MarkmapSettings;
+      for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof MarkmapSettings>) {
+        (settingsObj as any)[key] = this.settings.get(key);
+      }
+      this.tocMindmapComponent = new TocMindmapComponent(settingsObj);
       this.register(() => this.tocMindmapComponent.destroy()); // 注册卸载时的清理
 
       // 4. 初始化悬浮按钮组件
-      this.floatingButtonComponent = new FloatingButtonComponent(this.settings, () => {
+      this.floatingButtonComponent = new FloatingButtonComponent(settingsObj, () => {
         this.tocMindmapComponent.toggle();
       });
       this.floatingButtonComponent.show();
       this.register(() => this.floatingButtonComponent.destroy());
+
+      // 5. 监听设置变化并通知子组件
+      const settingsUpdateHandler = () => {
+        logger('检测到设置变化，正在更新组件...');
+        const newSettings = {} as MarkmapSettings;
+        for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof MarkmapSettings>) {
+          (newSettings as any)[key] = this.settings.get(key);
+        }
+        this.tocMindmapComponent.updateSettings(newSettings);
+        this.floatingButtonComponent.updateSettings(newSettings);
+      };
+
+      for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof MarkmapSettings>) {
+        this.register(this.settings.onChange(key, settingsUpdateHandler));
+      }
 
       logger('插件加载完成 🚀');
 

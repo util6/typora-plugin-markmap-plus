@@ -303,3 +303,27 @@ export function getDebugInfo() {
     timestamp: new Date().toISOString()
   }
 }
+
+// ==================== 通用工具函数 ====================
+
+/**
+ * 函数防抖
+ * 在事件触发后等待指定时间再执行，如果在此期间再次触发，则重新计时。
+ * @param func 要执行的函数
+ * @param wait 等待时间（毫秒）
+ * @returns 防抖后的函数
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: number | undefined;
+
+  return function(this: ThisParameterType<T>, ...args: Parameters<T>) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = window.setTimeout(() => {
+      func.apply(context, args);
+    }, wait);
+  };
+}

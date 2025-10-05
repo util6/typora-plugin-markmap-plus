@@ -16,10 +16,9 @@ import * as yaml from 'js-yaml'
 import { Transformer, type ITransformPlugin, builtInPlugins } from 'markmap-lib';
 import { Markmap, deriveOptions } from 'markmap-view';
 import { zoomIdentity, zoomTransform } from 'd3-zoom';
-import { PluginSettings, debounce } from '@typora-community-plugin/core';
 import { editor } from 'typora'
 import { MarkmapSettings } from '../settings';
-import { logger } from '../utils';
+import { logger, debounce } from '../utils';
 import interact from 'interactjs';
 
 // ==================== MARKMAP 渲染器集成 ====================
@@ -213,10 +212,22 @@ export class TocMindmapComponent {
 
   // 依赖注入：从父组件获取所需的 "props"
   constructor(
-    private settings: PluginSettings<MarkmapSettings>
+    private settings: MarkmapSettings
   ) {
     this.transformer = new Transformer([...builtInPlugins, resolveImagePath]);
     this._injectStyle();
+  }
+
+  /**
+   * 更新组件设置
+   * @param newSettings 新的设置对象
+   */
+  public updateSettings(newSettings: MarkmapSettings) {
+    this.settings = newSettings;
+    // 为简单起见，如果组件可见，则执行一次完整的更新，这足以安全地覆盖所有设置更改
+    if (this.isVisible) {
+      this._update();
+    }
   }
 
   // 集中化的内部状态，类似 Vue 的 data
@@ -301,8 +312,8 @@ export class TocMindmapComponent {
   private _createElement() {
     const container = document.createElement('div');
     container.className = 'markmap-toc-modal';
-    container.style.width = `${this.settings.get('tocWindowWidth')}px`;
-    container.style.height = `${this.settings.get('tocWindowHeight')}px`;
+    container.style.width = `${this.settings.tocWindowWidth}px`;
+    container.style.height = `${this.settings.tocWindowHeight}px`;
     container.innerHTML = COMPONENT_TEMPLATE;
     document.body.appendChild(container);
     this.state.element = container;
@@ -429,7 +440,7 @@ export class TocMindmapComponent {
       paddingX: 20,
       color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
       colorFreezeLevel: 2,
-      initialExpandLevel: this.settings.get('initialExpandLevel'),
+      initialExpandLevel: this.settings.initialExpandLevel,
     });
 
     this.state.markmap = Markmap.create(svg, options, root);
@@ -477,13 +488,13 @@ export class TocMindmapComponent {
 
   private _zoomIn() {
     if (!this.state.markmap) return;
-    const zoomStep = this.settings.get('zoomStep') ?? 0.2;
+    const zoomStep = this.settings.zoomStep ?? 0.2;
     this.state.markmap.svg.transition().duration(250).call(this.state.markmap.zoom.scaleBy, 1 + zoomStep);
   }
 
   private _zoomOut() {
     if (!this.state.markmap) return;
-    const zoomStep = this.settings.get('zoomStep') ?? 0.2;
+    const zoomStep = this.settings.zoomStep ?? 0.2;
     this.state.markmap.svg.transition().duration(250).call(this.state.markmap.zoom.scaleBy, 1 / (1 + zoomStep));
   }
 
@@ -520,8 +531,8 @@ export class TocMindmapComponent {
       });
       this.state.resizeObserver.observe(sidebar);
     } else {
-      this.state.element.style.width = `${this.settings.get('tocWindowWidth')}px`;
-      this.state.element.style.height = `${this.settings.get('tocWindowHeight')}px`;
+      this.state.element.style.width = `${this.settings.tocWindowWidth}px`;
+      this.state.element.style.height = `${this.settings.tocWindowHeight}px`;
       this.state.element.style.top = '';
       this.state.element.style.left = '';
       if (embedBtn) {
@@ -674,7 +685,7 @@ export class TocMindmapComponent {
   // --- 实时更新相关方法 ---
 
   private _initRealTimeUpdate() {
-    if (!this.settings.get('enableRealTimeUpdate')) return;
+    if (!this.settings.enableRealTimeUpdate) return;
 
     const writeElement = document.querySelector('#write');
     if (!writeElement) return;
