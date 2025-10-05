@@ -36,16 +36,18 @@ jobs:
         cd dist
         zip -r ../plugin.zip .
 
-    # 已更换：使用一个更纯粹、只负责生成日志内容的Action
-    - name: Generate Release Body
+    # 已更换为官方的、更可靠的 Action
+    - name: Generate Changelog
       id: changelog
-      uses: cycjimmy/release-body-creator@v2
+      uses: conventional-changelog/conventional-changelog-action@v5
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        # 我们只需要输出，不需要它生成 CHANGELOG.md 文件
+        output-file: "false"
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: plugin.zip
-        # 使用新工具的输出变量 `release_body`
-        body: ${{ steps.changelog.outputs.release_body }}
+        # 使用这个 Action 的输出变量 `changelog`
+        body: ${{ steps.changelog.outputs.changelog }}
