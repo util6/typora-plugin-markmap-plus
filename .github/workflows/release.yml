@@ -23,13 +23,15 @@ jobs:
         node-version: '18'
         cache: 'npm'
     
+    # 已修正：在安装依赖前，删除 package-lock.json 以避免跨平台问题
     - name: Install dependencies
-      run: npm install
+      run: |
+        rm -f package-lock.json
+        npm install
     
     - name: Build for Production
       run: npm run build:prod
     
-    # 已改回：打包方式和你的原始版本保持一致
     - name: Create Release Package
       run: |
         cd dist
@@ -44,6 +46,5 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        # 已改回：路径和你的原始版本保持一致
         files: plugin.zip
         body: ${{ steps.changelog.outputs.changelog }}
