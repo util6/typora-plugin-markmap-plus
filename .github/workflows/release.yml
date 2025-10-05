@@ -23,7 +23,6 @@ jobs:
         node-version: '18'
         cache: 'npm'
     
-    # 已修正：在安装依赖前，删除 package-lock.json 以避免跨平台问题
     - name: Install dependencies
       run: |
         rm -f package-lock.json
@@ -42,6 +41,10 @@ jobs:
       uses: TriPSs/conventional-changelog-action@v5
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
+        # 新增：跳过所有git提交和变基操作，只生成日志
+        skip-commit: 'true'
+        # 新增：我们只需要输出变量，不需要生成文件
+        output-file: 'false'
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
