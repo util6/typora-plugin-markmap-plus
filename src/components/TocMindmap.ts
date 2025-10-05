@@ -478,9 +478,22 @@ export class TocMindmapComponent {
     if (!write) return;
 
     const allHeadings = write.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    for (const heading of Array.from(allHeadings)) {
+    for (const heading of Array.from(allHeadings) as HTMLElement[]) {
       if (heading.textContent?.trim() === nodeText) {
+        
+        // 最终解决方案：使用 scroll-margin-top 属性，让浏览器自动处理偏移
+        const offset = this.settings.scrollOffset ?? 0;
+        logger(`跳转到标题：'${nodeText}'。应用偏移量：${offset}px`);
+
+        heading.style.scrollMarginTop = `${offset}px`;
+        
         heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // 滚动动画结束后，清理掉临时添加的样式，以防影响其他功能
+        setTimeout(() => {
+          heading.style.scrollMarginTop = '';
+        }, 1000); // 1秒的延迟足以等待动画完成
+
         return;
       }
     }

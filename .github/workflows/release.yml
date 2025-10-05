@@ -10,33 +10,37 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
+    - name: Checkout
+      uses: actions/checkout@v4
+      # 必须添加 fetch-depth: 0 来获取所有git历史，以便生成changelog
+      with:
+        fetch-depth: 0
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-    
+
     - name: Install dependencies
-      run: |
-        rm -f package-lock.json
-        npm install
-    
-    - name: Build
-      run: npm run package
-    
-    - name: Create release package
-      run: |
-        cd dist
-        zip -r ../plugin.zip .
-        cd ..
-        ls -la *.zip
-    
+      run: npm install
+
+    - name: Build and Package
+      # 运行 release 脚本来完成构建和打包
+      run: npm run release
+
+    # 新增步骤：从此处的提交历史中生成更新日志
+    - name: Generate Changelog
+      id: changelog
+      uses: TriPSs/conventional-changelog-action@v5
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: plugin.zip
-        generate_release_notes: true
+        files: plugin.zip # 更新了压缩包的正确路径
+        # 变更：将上一步生成的 changelog 作为 release 的内容
+        body: ${{ steps.changelog.outputs.changelog }}
