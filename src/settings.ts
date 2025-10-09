@@ -33,12 +33,23 @@ export interface MarkmapSettings {
   /** 是否启用实时更新功能 */
   enableRealTimeUpdate: boolean
 
+  /** 更新时是否保持节点的折叠状态 */
+  keepFoldStateWhenUpdate: boolean
+
+  /** 更新时是否自动适应视图 */
+  autoFitWhenUpdate: boolean
+
+  /** 动画持续时间（毫秒），0 表示禁用动画 */
+  animationDuration: number
+
   /** 悬浮按钮的大小（直径） */
   floatingButtonSize: number;
 
-
   /** 悬浮按钮的自定义SVG图标 */
   floatingButtonIconSvg: string;
+
+  /** 固定到侧边栏时是否允许拖动 */
+  allowDragWhenEmbedded: boolean;
 }
 
 /**
@@ -51,6 +62,7 @@ export const SETTING_CONSTRAINTS = {
   initialExpandLevel: { min: 1, max: 6, default: 3 },
   zoomStep: { min: 0.1, max: 1.0, default: 0.2 },
   floatingButtonSize: { min: 30, max: 100, default: 48 },
+  animationDuration: { min: 0, max: 1000, default: 500 },
 }
 
 /**
@@ -63,7 +75,11 @@ export const DEFAULT_SETTINGS: MarkmapSettings = {
   initialExpandLevel: SETTING_CONSTRAINTS.initialExpandLevel.default,
   zoomStep: SETTING_CONSTRAINTS.zoomStep.default,
   enableRealTimeUpdate: true,
+  keepFoldStateWhenUpdate: true, // 默认启用状态保持
+  autoFitWhenUpdate: false, // 默认不自动适应视图，避免干扰用户操作
+  animationDuration: SETTING_CONSTRAINTS.animationDuration.default, // 默认 500ms 动画
   floatingButtonSize: SETTING_CONSTRAINTS.floatingButtonSize.default,
+  allowDragWhenEmbedded: false,
   floatingButtonIconSvg: `
                            <svg t="1759578907796" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2106"><path d="M218.284617 899.677623s166.511177-8.320731 277.173394-9.333029c122.956069-1.1264 318.820937 9.333029 318.820938 9.333029l203.214262 22.97856s-317.478034 18.815269-522.0352 18.671908C294.821303 941.187657 2.864274 922.656183 2.864274 922.656183l215.420343-22.97856z" fill="#000000" opacity=".5" p-id="2107"></path><path d="M317.302491 95.685486c-17.79712-7.001234-32.607086-5.544229-39.046582-2.217692C247.808 109.193509 237.62944 134.9632 238.150217 164.825966c0.468114 27.01312 9.883063 56.349257 21.243612 81.1008 22.001371-37.566171 55.410103-76.358217 107.938377-102.1952a14.690011 14.690011 0 0 1-1.410195-2.194286c-13.1072-25.029486-31.545051-39.131429-48.61952-45.851794zM238.085851 269.1072a14.56128 14.56128 0 0 0 6.0416 6.249326c-10.412617 22.694766-17.086171 43.39712-21.963337 58.53184-3.273874 10.155154-5.740251 17.802971-7.984274 21.863863-10.146377 18.361783-32.513463 29.813029-59.017509 43.379565-58.719086 30.058789-137.742629 70.509714-149.190948 219.560229-10.713966 139.495131 125.5424 256.198949 254.191908 256.198948 68.783543 0 109.088183 11.18208 147.201463 21.755612 33.165897 9.201371 64.672914 17.94048 111.844206 18.449554 48.47616 0.520777 80.114834-7.364023 113.839543-15.772526 37.115611-9.251109 76.75904-19.131246 144.161646-19.131245 128.646583 0 254.314789-118.898103 238.729508-268.06272-14.736823-141.063314-85.106103-173.003337-138.623268-197.295543-25.474194-11.565349-47.133257-21.395749-57.153829-40.436297-1.117623-2.121143-2.425417-7.410834-4.327131-15.090835-3.724434-15.038171-9.716297-39.242606-20.962743-66.732617 0.236983-0.333531 0.462263-0.678766 0.672914-1.035703 16.290377-27.4432 33.34144-64.936229 36.963474-102.171794 3.695177-38.019657-6.711589-77.177417-46.954788-102.868114-15.444846-9.859657-39.324526-11.319589-62.528366-4.025783-23.952823 7.527863-48.900389 24.76032-67.490377 55.019086z" fill="#434343" p-id="2108"></path></svg>
                         `
@@ -171,6 +187,55 @@ export class MarkmapSettingTab extends SettingTab {
         checkbox.checked = this.settings.get('enableRealTimeUpdate')
         // 当用户切换开关时，保存到设置中
         checkbox.onchange = () => this.settings.set('enableRealTimeUpdate', checkbox.checked)
+      })
+    })
+
+    // 保持折叠状态设置
+    this.addSetting(item => {
+      item.addName('保持折叠状态')
+      item.addDescription('更新思维导图时保持节点的展开/折叠状态')
+      item.addCheckbox((checkbox) => {
+        checkbox.checked = this.settings.get('keepFoldStateWhenUpdate')
+        checkbox.onchange = () => this.settings.set('keepFoldStateWhenUpdate', checkbox.checked)
+      })
+    })
+
+    // 自动适应视图设置
+    this.addSetting(item => {
+      item.addName('更新时自动适应视图')
+      item.addDescription('更新思维导图后自动调整视图以显示完整内容')
+      item.addCheckbox((checkbox) => {
+        checkbox.checked = this.settings.get('autoFitWhenUpdate')
+        checkbox.onchange = () => this.settings.set('autoFitWhenUpdate', checkbox.checked)
+      })
+    })
+
+    // 动画持续时间设置
+    this.addSetting(item => {
+      item.addName('动画持续时间')
+      item.addDescription('思维导图更新时的动画持续时间（毫秒），设为 0 禁用动画')
+      item.addInput('number', (input) => {
+        const config = SETTING_CONSTRAINTS.animationDuration
+        input.value = this.settings.get('animationDuration').toString()
+        input.min = config.min.toString()
+        input.max = config.max.toString()
+        input.step = '50'
+        input.onchange = () => {
+          const value = parseInt(input.value)
+          if (value >= config.min && value <= config.max) {
+            this.settings.set('animationDuration', value)
+          }
+        }
+      })
+    })
+
+    // 固定状态拖动设置
+    this.addSetting(item => {
+      item.addName('固定时允许拖动')
+      item.addDescription('当思维导图固定到侧边栏时，是否仍允许拖动位置')
+      item.addCheckbox((checkbox) => {
+        checkbox.checked = this.settings.get('allowDragWhenEmbedded')
+        checkbox.onchange = () => this.settings.set('allowDragWhenEmbedded', checkbox.checked)
       })
     })
 

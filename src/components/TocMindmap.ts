@@ -98,7 +98,8 @@ function renderMarkmap(options: {
     const { root } = new Transformer([...builtInPlugins, resolveImagePath]).transform(content)
     mm.setData(root)
 
-    mm.fit(1)
+    // 移除自动适应视图调用，保持用户缩放状态
+    // mm.fit(1)
   })
   return
 }
@@ -152,6 +153,11 @@ const COMPONENT_STYLE = `
     align-items: center;
     background: #f8f9fa;
     cursor: move; /* 添加移动光标 */
+  }
+
+  /* 嵌入状态下的标题栏样式 */
+  .markmap-toc-modal.sidebar-embedded .markmap-toc-header {
+    cursor: default; /* 默认为禁用移动光标，将由JS动态控制 */
   }
   .markmap-toc-title {
     font-weight: bold;
@@ -238,10 +244,11 @@ export class TocMindmapComponent {
     resizeObserver: null as ResizeObserver | null,
     contentObserver: null as MutationObserver | null,
     lastHeadingsHash: '',
+    lastMarkmapData: null as any, // 保存上次的 markmap 数据用于状态保持
   };
 
   private transformer: Transformer;
-  private debouncedUpdate = debounce(this._handleContentChange.bind(this), 300);
+  private debouncedUpdate = debounce(this._handleContentChange.bind(this), 200); // 适中的防抖时间
 
   // 模拟计算属性，类似 Vue 的 computed
   get isVisible(): boolean {
@@ -323,8 +330,43 @@ export class TocMindmapComponent {
   private _setupInteractJS() {
     if (!this.state.element) return;
 
-    interact(this.state.element)
-      .draggable({
+    // 初始化 InteractJS 实例
+    const interactInstance = interact(this.state.element);
+    
+    // 设置调整大小功能（始终启用）
+    interactInstance.resizable({
+      edges: { left: true, right: true, bottom: true, top: true },
+      listeners: {
+        move: (event) => {
+          const target = event.target;
+          target.style.width = `${event.rect.width}px`;
+          target.style.height = `${event.rect.height}px`;
+          target.style.left = `${event.rect.left}px`;
+          target.style.top = `${event.rect.top}px`;
+          target.style.transform = 'none';
+          target.removeAttribute('data-x');
+          target.removeAttribute('data-y');
+        }
+      }
+    });
+
+    // 根据当前状态设置拖动功能
+    this._updateInteractSettings();
+  }
+
+  private _updateInteractSettings() {
+    if (!this.state.element) return;
+
+    const interactInstance = interact(this.state.element);
+    const header = this.state.element.querySelector('.markmap-toc-header') as HTMLElement;
+    
+    if (this.state.isEmbedded && !this.settings.allowDragWhenEmbedded) {
+      // 嵌入状态且设置为不允许拖动：禁用拖动
+      interactInstance.draggable(false);
+      if (header) header.style.cursor = 'default';
+    } else {
+      // 悬浮状态或设置为允许拖动：启用拖动
+      interactInstance.draggable({
         allowFrom: '.markmap-toc-header',
         ignoreFrom: '.markmap-svg, .markmap-content',
         listeners: {
@@ -338,22 +380,9 @@ export class TocMindmapComponent {
             target.setAttribute('data-y', y.toString());
           }
         }
-      })
-      .resizable({
-        edges: { left: true, right: true, bottom: true, top: true },
-        listeners: {
-          move: (event) => {
-            const target = event.target;
-            target.style.width = `${event.rect.width}px`;
-            target.style.height = `${event.rect.height}px`;
-            target.style.left = `${event.rect.left}px`;
-            target.style.top = `${event.rect.top}px`;
-            target.style.transform = 'none';
-            target.removeAttribute('data-x');
-            target.removeAttribute('data-y');
-          }
-        }
       });
+      if (header) header.style.cursor = 'move';
+    }
   }
 
   private _injectStyle() {
@@ -419,10 +448,6 @@ export class TocMindmapComponent {
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
-    this.state.markmap?.destroy();
-    this.state.markmap = null;
-    svg.innerHTML = '';
-
     const headings = await this._getDocumentHeadings();
     this.state.lastHeadingsHash = this._getHeadingsHash(headings);
 
@@ -441,10 +466,25 @@ export class TocMindmapComponent {
       color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
       colorFreezeLevel: 2,
       initialExpandLevel: this.settings.initialExpandLevel,
+      duration: this.settings.animationDuration, // 使用用户配置的动画持续时间
     });
 
-    this.state.markmap = Markmap.create(svg, options, root);
-    setTimeout(() => this.state.markmap?.fit(), 100);
+    if (this.state.markmap) {
+      // 保持折叠状态
+      this._preserveFoldState(root);
+
+      // 更新数据，这将自动保留当前的缩放和平移状态，实现平滑更新
+      this.state.markmap.setData(root, options);
+    } else {
+      // 首次创建
+      svg.innerHTML = '';
+      this.state.markmap = Markmap.create(svg, options, root);
+      // 只在首次创建时自动适应视图
+      setTimeout(() => this.state.markmap?.fit(), 100);
+    }
+
+    // 保存当前数据用于下次状态保持
+    this.state.lastMarkmapData = root;
   }
 
   private _buildTocMarkdown(headings: Array<{level: number, text: string, id: string}>): string {
@@ -507,6 +547,9 @@ export class TocMindmapComponent {
     this.state.element.classList.toggle('sidebar-embedded');
     this.state.isEmbedded = this.state.element.classList.contains('sidebar-embedded');
 
+    // 更新拖动设置
+    this._updateInteractSettings();
+
     const embedBtn = this.state.element.querySelector('[data-action="dock-left"]') as HTMLElement;
 
     if (this.state.isEmbedded) {
@@ -542,7 +585,7 @@ export class TocMindmapComponent {
       this.state.resizeObserver?.disconnect();
       this.state.resizeObserver = null;
     }
-    setTimeout(() => this.state.markmap?.fit(), 100);
+    // 移除自动适应视图调用，保持用户当前的缩放状态
   }
 
   private _fitToView(event?: MouseEvent) {
@@ -551,57 +594,66 @@ export class TocMindmapComponent {
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
-    const currentHeadingObj = this._getCurrentVisibleHeading();
-    if (!currentHeadingObj) {
-      this.state.markmap.fit();
-      logger('未找到当前标题，使用默认适应视图');
-      return;
-    }
-
-    const currentHeading = currentHeadingObj.text;
-    logger(`当前可见标题: "${currentHeading}"`);
-
-    const nodeElements = svg.querySelectorAll('g > foreignObject');
-    let targetElement = null;
-
-    for (const nodeEl of Array.from(nodeElements)) {
-      const textContent = nodeEl.textContent?.trim() || '';
-      if (textContent === currentHeading) {
-        targetElement = nodeEl.parentElement;
-        logger(`找到匹配节点: "${textContent}"`);
-        break;
+    // 检查是否是用户主动点击适应视图按钮
+    const isUserClick = event && event.type === 'click';
+    
+    if (isUserClick) {
+      // 用户主动点击时，提供智能适应视图
+      const currentHeadingObj = this._getCurrentVisibleHeading();
+      if (!currentHeadingObj) {
+        this.state.markmap.fit();
+        logger('未找到当前标题，使用默认适应视图');
+        return;
       }
-    }
 
-    if (targetElement) {
-      const transform = zoomTransform(svg);
-      const scale = this._calculateOptimalScale(targetElement, currentHeadingObj, transform.k);
-      logger(`计算出的缩放比例: ${scale}`);
+      const currentHeading = currentHeadingObj.text;
+      logger(`当前可见标题: "${currentHeading}"`);
 
-      const svgRect = svg.getBoundingClientRect();
-      const nodeRect = targetElement.getBoundingClientRect();
+      const nodeElements = svg.querySelectorAll('g > foreignObject');
+      let targetElement = null;
 
-      const originalNodeX =
-        (nodeRect.left - svgRect.left - transform.x) / transform.k +
-        nodeRect.width / (2 * transform.k);
-      const originalNodeY =
-        (nodeRect.top - svgRect.top - transform.y) / transform.k +
-        nodeRect.height / (2 * transform.k);
+      for (const nodeEl of Array.from(nodeElements)) {
+        const textContent = nodeEl.textContent?.trim() || '';
+        if (textContent === currentHeading) {
+          targetElement = nodeEl.parentElement;
+          logger(`找到匹配节点: "${textContent}"`);
+          break;
+        }
+      }
 
-      const newTransform = zoomIdentity
-        .translate(svg.clientWidth / 2, svg.clientHeight / 2)
-        .scale(scale)
-        .translate(-originalNodeX, -originalNodeY);
+      if (targetElement) {
+        const transform = zoomTransform(svg);
+        const scale = this._calculateOptimalScale(targetElement, currentHeadingObj, transform.k);
+        logger(`计算出的缩放比例: ${scale}`);
 
-      this.state.markmap.svg
-        .transition()
-        .duration(500)
-        .call(this.state.markmap.zoom.transform, newTransform);
+        const svgRect = svg.getBoundingClientRect();
+        const nodeRect = targetElement.getBoundingClientRect();
 
-      logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}`);
+        const originalNodeX =
+          (nodeRect.left - svgRect.left - transform.x) / transform.k +
+          nodeRect.width / (2 * transform.k);
+        const originalNodeY =
+          (nodeRect.top - svgRect.top - transform.y) / transform.k +
+          nodeRect.height / (2 * transform.k);
+
+        const newTransform = zoomIdentity
+          .translate(svg.clientWidth / 2, svg.clientHeight / 2)
+          .scale(scale)
+          .translate(-originalNodeX, -originalNodeY);
+
+        this.state.markmap.svg
+          .transition()
+          .duration(500)
+          .call(this.state.markmap.zoom.transform, newTransform);
+
+        logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}`);
+      } else {
+        // 如果在思维导图中未找到匹配节点，则使用默认适应视图
+        this.state.markmap.fit();
+      }
     } else {
-      // 如果在思维导图中未找到匹配节点，则回退到默认适应视图
-      this.state.markmap.fit();
+      // 非用户主动点击时，不执行任何适应视图操作
+      logger('非用户主动操作，跳过适应视图');
     }
   }
 
@@ -687,17 +739,97 @@ export class TocMindmapComponent {
   private _initRealTimeUpdate() {
     if (!this.settings.enableRealTimeUpdate) return;
 
+    // 尝试使用 Typora 的事件系统，失败则回退到 MutationObserver
+    if (!this._tryInitTyporaEventSystem()) {
+      this._initMutationObserver();
+    }
+  }
+
+  /**
+   * 尝试初始化 Typora 事件系统
+   * 基于参考实现中的事件监听机制
+   */
+  private _tryInitTyporaEventSystem(): boolean {
+    try {
+      const possibleEventHubs = [
+        (window as any).eventHub,
+        (window as any).File?.eventHub,
+        (window as any).typora?.eventHub,
+        (window as any).editor?.eventHub
+      ];
+
+      for (const eventHub of possibleEventHubs) {
+        if (eventHub && eventHub.addEventListener && eventHub.eventType) {
+          if (eventHub.eventType.outlineUpdated) {
+            eventHub.addEventListener(eventHub.eventType.outlineUpdated, () => {
+              if (!this.isVisible) return;
+              this._handleContentChange();
+            });
+            return true;
+          }
+
+          const possibleEvents = ['contentChanged', 'documentChanged', 'tocUpdated', 'fileContentChanged'];
+          for (const eventName of possibleEvents) {
+            if (eventHub.eventType[eventName]) {
+              eventHub.addEventListener(eventHub.eventType[eventName], () => {
+                if (!this.isVisible) return;
+                this.debouncedUpdate();
+              });
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * 初始化 MutationObserver（优化版本）
+   */
+  private _initMutationObserver() {
     const writeElement = document.querySelector('#write');
     if (!writeElement) return;
 
-    this.state.contentObserver = new MutationObserver(this.debouncedUpdate);
+    this.state.contentObserver = new MutationObserver((mutations) => {
+      // 检查是否有任何可能影响标题的变化
+      const hasRelevantChanges = mutations.some(mutation => {
+        // 检查子节点变化（新增/删除元素）
+        if (mutation.type === 'childList') {
+          return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+        }
+        
+        // 检查文本内容变化
+        if (mutation.type === 'characterData') {
+          return true;
+        }
+        
+        // 检查属性变化
+        if (mutation.type === 'attributes') {
+          return true;
+        }
+        
+        return false;
+      });
+
+      if (hasRelevantChanges) {
+        logger('检测到文档内容变化，准备更新思维导图');
+        this.debouncedUpdate();
+      }
+    });
+
     this.state.contentObserver.observe(writeElement, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: true,
+      attributeOldValue: true,
+      characterDataOldValue: true
     });
 
-    logger('实时更新监听器已启动');
+    logger('MutationObserver 已启动，监听范围：childList, subtree, characterData, attributes');
   }
 
   private _cleanupRealTimeUpdate() {
@@ -711,17 +843,62 @@ export class TocMindmapComponent {
   private async _handleContentChange() {
     if (!this.isVisible) return;
 
-    const headings = await this._getDocumentHeadings();
-    const currentHash = this._getHeadingsHash(headings);
+    try {
+      const headings = await this._getDocumentHeadings();
+      const currentHash = this._getHeadingsHash(headings);
 
-    if (currentHash !== this.state.lastHeadingsHash) {
-      logger('检测到标题结构变化，更新思维导图');
-      this.state.lastHeadingsHash = currentHash;
-      await this._update();
+      if (currentHash !== this.state.lastHeadingsHash) {
+        this.state.lastHeadingsHash = currentHash;
+        await this._update();
+      }
+    } catch (error) {
+      logger(`处理内容变化时出错: ${error.message}`, 'error', error);
     }
   }
 
   private _getHeadingsHash(headings: Array<{level: number, text: string, id: string}>): string {
     return headings.map(h => `${h.level}:${h.text}`).join('|');
+  }
+
+  /**
+   * 保持节点的折叠状态
+   * 基于节点路径匹配来恢复之前的折叠状态
+   */
+  private _preserveFoldState(newRoot: any) {
+    if (!this.settings.keepFoldStateWhenUpdate || !this.state.lastMarkmapData) return;
+
+    // 构建路径映射函数
+    const buildPath = (node: any, parent?: any): string => {
+      const parentPath = (parent && parent.__path) || '';
+      return `${parentPath}\n${node.content}`;
+    };
+
+    // 遍历函数
+    const traverse = (node: any, fn: (node: any) => void, parent?: any) => {
+      node.__path = buildPath(node, parent);
+      fn(node);
+      if (node.children) {
+        for (const child of node.children) {
+          traverse(child, fn, node);
+        }
+      }
+    };
+
+    // 收集需要折叠的节点路径
+    const foldedPaths = new Set<string>();
+    traverse(this.state.lastMarkmapData, (node) => {
+      if (node.payload && node.payload.fold) {
+        foldedPaths.add(node.__path);
+      }
+    });
+
+    // 恢复折叠状态
+    traverse(newRoot, (node) => {
+      if (node.payload && foldedPaths.has(node.__path)) {
+        node.payload.fold = 1;
+      }
+    });
+
+    logger(`恢复了 ${foldedPaths.size} 个节点的折叠状态`);
   }
 }
