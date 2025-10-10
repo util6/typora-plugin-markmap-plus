@@ -16,6 +16,7 @@ import * as yaml from 'js-yaml'
 import { Transformer, type ITransformPlugin, builtInPlugins } from 'markmap-lib';
 import { Markmap, deriveOptions } from 'markmap-view';
 import { zoomIdentity, zoomTransform } from 'd3-zoom';
+import { select } from 'd3-selection';
 import { editor } from 'typora'
 import { MarkmapSettings } from '../settings';
 import { logger, debounce } from '../utils';
@@ -251,6 +252,7 @@ export class TocMindmapComponent {
   ) {
     this.transformer = new Transformer([...builtInPlugins, resolveImagePath]);
     this._injectStyle();
+    this._updateHighlightStyle(); // 初始化时注入高亮样式
   }
 
   /**
@@ -267,6 +269,7 @@ export class TocMindmapComponent {
   public updateSettings(newSettings: MarkmapSettings) {
     // 直接替换当前设置对象
     this.settings = newSettings;
+    this._updateHighlightStyle(); // 更新高亮样式
 
     // 为简单起见，如果组件可见，则执行一次完整的更新
     // 这足以安全地覆盖所有设置更改，确保新设置立即生效
@@ -434,6 +437,39 @@ export class TocMindmapComponent {
     styleTag.id = styleId;
     styleTag.textContent = COMPONENT_STYLE;
     document.head.appendChild(styleTag);
+  }
+
+  /**
+   * 动态更新高亮样式
+   *
+   * 根据用户在设置中选择的颜色，动态创建或更新一个 <style> 标签，
+   * 其中包含高亮动画的 @keyframes 规则。
+   * 这使得高亮颜色可以由用户自定义。
+   */
+  private _updateHighlightStyle() {
+    const styleId = 'markmap-highlight-style';
+    let styleTag = document.getElementById(styleId) as HTMLStyleElement;
+
+    // 如果样式标签不存在，则创建一个
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = styleId;
+      document.head.appendChild(styleTag);
+    }
+
+    const color = this.settings.highlightColor;
+    const duration = this.settings.highlightDuration / 1000; // 转换为秒
+    // 动态生成 keyframes，将用户自定义颜色和持续时间注入
+    styleTag.textContent = `
+      @keyframes markmap-highlight-animation {
+        from { background-color: ${color}; }
+        to { background-color: transparent; }
+      }
+
+      .markmap-highlight {
+        animation: markmap-highlight-animation ${duration}s ease-out;
+      }
+    `;
   }
 
   private _eventCleanupFunctions: (() => void)[] = [];
@@ -656,9 +692,15 @@ export class TocMindmapComponent {
     const originalMargin = element.style.scrollMarginTop;
     element.style.scrollMarginTop = `${this.settings.scrollOffsetTop}px`;
     element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // 添加高亮效果
+    element.classList.add('markmap-highlight');
+
+    // 动画结束后移除类并恢复margin，以便下次可以重新触发
     setTimeout(() => {
       element.style.scrollMarginTop = originalMargin;
-    }, this.DELAYS.SCROLL_MARGIN_RESET);
+      element.classList.remove('markmap-highlight');
+    }, this.settings.highlightDuration); // 持续时间应与动画时间一致
   }
 
   /**
@@ -793,12 +835,20 @@ export class TocMindmapComponent {
       const targetElement = this._findNodeByPath(currentPath);
 
       if (targetElement) {
+        logger('找到目标节点，准备平移、缩放和高亮。');
         this._panAndZoomToNode(targetElement, currentHeadingObj);
       } else {
+        logger('未在思维导图中找到匹配的节点，使用默认适应视图。');
         this.state.markmap.fit();
       }
     } else {
-      logger('非用户主动操作，跳过适应视图');
+      // 如果不是用户主动点击，则根据设置决定是否执行 fit
+      if (this.settings.autoFitWhenUpdate) {
+        logger('根据设置自动适应视图。');
+        this.state.markmap.fit();
+      } else {
+        logger('非用户主动操作，且未开启自动适应，跳过适应视图');
+      }
     }
   }
 
@@ -809,6 +859,28 @@ export class TocMindmapComponent {
    */
   private _panAndZoomToNode(targetElement: Element, headingObj: any) {
     if (!this.state.markmap || !this.state.element) return;
+
+    logger('进入 _panAndZoomToNode，开始高亮和动画。');
+    // 添加节点高亮效果
+    const nodeSelection = select(targetElement);
+    // 尝试高亮 foreignObject 内部的 div，效果更好
+    const foDivSelection = nodeSelection.select('foreignObject > div > div');
+    if (!foDivSelection.empty()) {
+      const originalBg = foDivSelection.style('background-color');
+      const highlightColor = this.settings.highlightColor;
+      const duration = this.settings.highlightDuration;
+      logger(`高亮节点文本背景：原始颜色=${originalBg}, 高亮色=${highlightColor}, 持续时间=${duration}ms`);
+
+      foDivSelection.transition('highlight')
+        .duration(duration / 2)
+        .style('background-color', highlightColor)
+        .transition()
+        .duration(duration / 2)
+        .style('background-color', originalBg);
+    } else {
+      logger('在节点内未找到 foreignObject>div>div 元素进行高亮。');
+    }
+
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
