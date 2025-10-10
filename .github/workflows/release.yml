@@ -35,7 +35,7 @@ jobs:
       - name: Build
         run: npm run build:prod
 
-      # 生成更新说明
+      # 生成更新说明（从上一个版本到当前版本的所有commit）
       - name: Generate changelog
         id: changelog
         run: |
@@ -46,11 +46,15 @@ jobs:
           if [ -n "$PREV_TAG" ]; then
             echo "## 🚀 更新内容" > changelog.md
             echo "" >> changelog.md
-            git log --pretty=format:"- %s" $PREV_TAG..HEAD >> changelog.md
+            echo "**完整提交记录 (${PREV_TAG}...${GITHUB_REF_NAME}):**" >> changelog.md
+            echo "" >> changelog.md
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> changelog.md
           else
             echo "## 🚀 首次发布" > changelog.md
             echo "" >> changelog.md
-            echo "- 初始版本发布" >> changelog.md
+            echo "**所有提交记录:**" >> changelog.md
+            echo "" >> changelog.md
+            git log --pretty=format:"- %s (%h)" >> changelog.md
           fi
 
           # 输出到GitHub Actions
