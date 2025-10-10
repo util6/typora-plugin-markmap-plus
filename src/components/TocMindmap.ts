@@ -1,12 +1,12 @@
 /**
  * Typora Markmap Plus 插件 - TOC 思维导图组件
- * 
+ *
  * 功能说明：
  * - 为当前文档的标题生成交互式思维导图
  * - 支持窗口拖动和调整大小（基于 InteractJS）
  * - 支持嵌入侧边栏模式
  * - 提供实时更新和节点点击跳转功能
- * 
+ *
  * @author util6
  * @version 1.0.3
  */
@@ -20,6 +20,27 @@ import { editor } from 'typora'
 import { MarkmapSettings } from '../settings';
 import { logger, debounce } from '../utils';
 import interact from 'interactjs';
+
+// ==================== 类型定义 ====================
+
+/**
+ * 标题信息类型
+ * 包含标题的所有必要信息，用于生成思维导图和跳转定位
+ */
+type HeadingInfo = {
+  /** 标题级别 (1-6) */
+  level: number;
+  /** 标题文本内容 */
+  text: string;
+  /** 标题 ID */
+  id: string;
+  /** 标题在文档中的索引 */
+  index: number;
+  /** 从根到当前节点的完整路径，用于唯一标识 */
+  path: string;
+  /** 标题元素引用 */
+  element: HTMLElement;
+};
 
 // ==================== MARKMAP 渲染器集成 ====================
 
@@ -64,44 +85,6 @@ const resolveImagePath: ITransformPlugin = {
     })
     return {}
   }
-}
-
-const RE_FRONT_MATTER = /^---\s*\n([\s\S]+?)\n---\s*\n?/
-
-function parseMarkdown(md: string) {
-  let frontMatter = ''
-
-  const content = md
-    .replace(RE_FRONT_MATTER, (_, $1) => {
-      frontMatter = $1
-      return ''
-    })
-
-  return { frontMatter, content }
-}
-
-function renderMarkmap(options: {
-  globalOptions: string,
-  markdown: string,
-  getMarkmap(): Markmap,
-}) {
-  setTimeout(() => {
-    const { frontMatter, content } = parseMarkdown(options.markdown)
-    const globalOpts = yaml.load(options.globalOptions) ?? {}
-    const fronMatterJson = yaml.load(frontMatter) ?? {} as any
-    const localOpts = fronMatterJson.markmap ?? fronMatterJson
-    const jsonOpts = { ...globalOpts, ...localOpts }
-    const opts = deriveOptions(jsonOpts as any)
-    const mm = options.getMarkmap()
-    mm.setOptions(opts)
-
-    const { root } = new Transformer([...builtInPlugins, resolveImagePath]).transform(content)
-    mm.setData(root)
-
-    // 移除自动适应视图调用，保持用户缩放状态
-    // mm.fit(1)
-  })
-  return
 }
 
 // =======================================================
@@ -216,6 +199,52 @@ const COMPONENT_TEMPLATE = `
 // =======================================================
 export class TocMindmapComponent {
 
+  // ==================== 常量定义 ====================
+
+  /**
+   * 延迟时间常量（单位：毫秒）
+   * 用于控制各种异步操作的时间间隔
+   */
+  private readonly DELAYS = {
+    /** DOM 属性设置延迟 - 等待 DOM 更新完成 */
+    ATTRIBUTE_SET: 100,
+    /** 初始适应视图延迟 - 等待初始渲染完成 */
+    INITIAL_FIT: 150,
+    /** 缩放过渡动画时长 */
+    ZOOM_TRANSITION: 250,
+    /** 适应视图过渡动画时长 */
+    FIT_TRANSITION: 500,
+    /** 滚动边距重置延迟 - 等待滚动动画完成 */
+    SCROLL_MARGIN_RESET: 1000,
+    /** 属性检查延迟 - 等待属性设置完成 */
+    ATTRIBUTE_CHECK: 50,
+  } as const;
+
+  /**
+   * Markmap 默认配置选项
+   * 控制思维导图的视觉样式和行为
+   */
+  private readonly MARKMAP_OPTIONS = {
+    /** 水平间距 */
+    spacingHorizontal: 80,
+    /** 垂直间距 */
+    spacingVertical: 20,
+    /** 适应视图比例 */
+    fitRatio: 0.95,
+    /** 内边距 */
+    paddingX: 20,
+    /** 节点颜色方案 */
+    color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'] as string[],
+    /** 颜色冻结层级 */
+    colorFreezeLevel: 2,
+  };
+
+  /**
+   * 视口偏移量（单位：像素）
+   * 用于判断标题是否在视口内
+   */
+  private readonly VIEWPORT_OFFSET = 100;
+
   // 依赖注入：从父组件获取所需的 "props"
   constructor(
     private settings: MarkmapSettings
@@ -226,11 +255,21 @@ export class TocMindmapComponent {
 
   /**
    * 更新组件设置
-   * @param newSettings 新的设置对象
+   *
+   * 当用户在 Typora 设置界面中修改插件配置时，主插件会调用此方法
+   * 来同步更新组件的设置。这确保了设置变化能够立即生效。
+   *
+   * 特别重要的是 scrollOffsetTop 设置，它控制点击跳转时标题距离
+   * 视窗顶部的像素距离，用户可以在设置中配置 0-500px 的值。
+   *
+   * @param newSettings 新的设置对象，包含所有用户配置的参数
    */
   public updateSettings(newSettings: MarkmapSettings) {
+    // 直接替换当前设置对象
     this.settings = newSettings;
-    // 为简单起见，如果组件可见，则执行一次完整的更新，这足以安全地覆盖所有设置更改
+
+    // 为简单起见，如果组件可见，则执行一次完整的更新
+    // 这足以安全地覆盖所有设置更改，确保新设置立即生效
     if (this.isVisible) {
       this._update();
     }
@@ -245,6 +284,7 @@ export class TocMindmapComponent {
     contentObserver: null as MutationObserver | null,
     lastHeadingsHash: '',
     lastMarkmapData: null as any, // 保存上次的 markmap 数据用于状态保持
+    headingsMap: new Map<string, HeadingInfo>(), // 缓存最新的标题信息，用于跳转匹配
   };
 
   private transformer: Transformer;
@@ -296,6 +336,7 @@ export class TocMindmapComponent {
     this.state.resizeObserver = null;
     this.state.contentObserver = null;
     this.state.lastHeadingsHash = '';
+    this.state.headingsMap.clear();
 
     logger('TOC 窗口已关闭');
   }
@@ -332,7 +373,7 @@ export class TocMindmapComponent {
 
     // 初始化 InteractJS 实例
     const interactInstance = interact(this.state.element);
-    
+
     // 设置调整大小功能（始终启用）
     interactInstance.resizable({
       edges: { left: true, right: true, bottom: true, top: true },
@@ -359,7 +400,7 @@ export class TocMindmapComponent {
 
     const interactInstance = interact(this.state.element);
     const header = this.state.element.querySelector('.markmap-toc-header') as HTMLElement;
-    
+
     if (this.state.isEmbedded && !this.settings.allowDragWhenEmbedded) {
       // 嵌入状态且设置为不允许拖动：禁用拖动
       interactInstance.draggable(false);
@@ -374,7 +415,7 @@ export class TocMindmapComponent {
             const target = event.target;
             const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
             const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-            
+
             target.style.transform = `translate(${x}px, ${y}px)`;
             target.setAttribute('data-x', x.toString());
             target.setAttribute('data-y', y.toString());
@@ -397,76 +438,93 @@ export class TocMindmapComponent {
 
   private _eventCleanupFunctions: (() => void)[] = [];
 
-    private _attachEventListeners() {
-      if (!this.state.element) return;
+  private _attachEventListeners() {
+    if (!this.state.element) return;
 
-      // 使用单一事件委托模式，在组件根元素上监听所有点击
-      const boundHandler = this._handleModalClick.bind(this);
-      this.state.element.addEventListener('click', boundHandler);
-      this._eventCleanupFunctions.push(() => this.state.element!.removeEventListener('click', boundHandler));
-    }
+    // 使用单一事件委托模式，在组件根元素上监听所有点击
+    const boundHandler = this._handleModalClick.bind(this);
+    this.state.element.addEventListener('click', boundHandler);
+    this._eventCleanupFunctions.push(() => this.state.element!.removeEventListener('click', boundHandler));
+  }
 
-    private _cleanupEventListeners() {
-      this._eventCleanupFunctions.forEach(cleanup => cleanup());
-      this._eventCleanupFunctions = [];
-    }
+  private _cleanupEventListeners() {
+    this._eventCleanupFunctions.forEach(cleanup => cleanup());
+    this._eventCleanupFunctions = [];
+  }
 
-    // 统一的点击事件处理器
-    private _handleModalClick = async (e: Event) => {
-      const target = e.target as HTMLElement;
+  /**
+   * 统一的点击事件处理器
+   *
+   * 使用事件委托模式在组件根元素上监听所有点击事件，
+   * 然后根据点击目标的不同执行相应的操作：
+   * - 功能按钮点击：关闭、固定、刷新、缩放等操作
+   * - 思维导图节点点击：跳转到对应的文档标题
+   *
+   * @param e 点击事件对象
+   */
+  private _handleModalClick = async (e: Event) => {
+    const target = e.target as HTMLElement;
 
-      // 检查是否点击了功能按钮
-      const actionBtn = target.closest('[data-action]');
-      if (actionBtn) {
-        const action = actionBtn.getAttribute('data-action');
-        try {
-          switch (action) {
-            case 'close': this.hide(); break;
-            case 'dock-left': this._toggleEmbed(); break;
-            case 'refresh': await this._update(); break;
-            case 'zoom-in': this._zoomIn(); break;
-            case 'zoom-out': this._zoomOut(); break;
-            case 'fit': this._fitToView(e as MouseEvent); break;
-          }
-        } catch (error) {
-          logger(`按钮操作失败: ${error.message}`, 'error', error);
+    // 检查是否点击了功能按钮（通过 data-action 属性识别）
+    const actionBtn = target.closest('[data-action]');
+    if (actionBtn) {
+      const action = actionBtn.getAttribute('data-action');
+      try {
+        // 根据按钮的 action 属性执行相应的功能
+        switch (action) {
+          case 'close': this.hide(); break;           // 关闭思维导图窗口
+          case 'dock-left': this._toggleEmbed(); break; // 切换侧边栏嵌入状态
+          case 'refresh': await this._update(); break;   // 刷新思维导图内容
+          case 'zoom-in': this._zoomIn(); break;         // 放大思维导图
+          case 'zoom-out': this._zoomOut(); break;       // 缩小思维导图
+          case 'fit': this._fitToView(e as MouseEvent); break; // 适应视图大小
         }
-        return; // 处理完按钮点击后结束
+      } catch (error) {
+        logger(`按钮操作失败: ${error.message}`, 'error', error);
       }
-
-      // 检查是否点击了思维导图节点
-      const nodeEl = target.closest('.markmap-node');
-      if (nodeEl) {
-        this._scrollToHeadingByNode(nodeEl);
-        return; // 处理完节点点击后结束
-      }
+      return; // 处理完按钮点击后结束，避免继续处理其他点击逻辑
     }
+
+    // 检查是否点击了思维导图节点（通过 CSS 类名识别）
+    const nodeEl = target.closest('.markmap-node');
+    if (nodeEl) {
+      // 调用跳转方法，实现点击节点跳转到对应标题的功能
+      this._scrollToHeadingByNode(nodeEl);
+      return; // 处理完节点点击后结束
+    }
+
+    // 如果既不是按钮也不是节点，不执行任何操作
+  }
   private _update = async () => {
     if (!this.state.element) return;
 
+    const oldHash = this.state.lastHeadingsHash;
+    await this._getDocumentHeadings();
+    const headings = Array.from(this.state.headingsMap.values());
+    const newHash = this._getHeadingsHash(headings);
+
+    if (newHash === oldHash) return;
+
     logger('更新 TOC Markmap');
+    this.state.lastHeadingsHash = newHash;
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
-    const headings = await this._getDocumentHeadings();
-    this.state.lastHeadingsHash = this._getHeadingsHash(headings);
-
-    if (headings.length === 0) {
+    if (this.state.headingsMap.size === 0) {
       this._renderEmpty(svg);
       return;
     }
 
     const markdownContent = this._buildTocMarkdown(headings);
     const { root } = this.transformer.transform(markdownContent);
+
+    // 为每个节点添加路径信息
+    this._addNodePath(root);
+
     const options = deriveOptions({
-      spacingHorizontal: 80,
-      spacingVertical: 20,
-      fitRatio: 0.95,
-      paddingX: 20,
-      color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4'],
-      colorFreezeLevel: 2,
+      ...this.MARKMAP_OPTIONS,
       initialExpandLevel: this.settings.initialExpandLevel,
-      duration: this.settings.animationDuration, // 使用用户配置的动画持续时间
+      duration: this.settings.animationDuration,
     });
 
     if (this.state.markmap) {
@@ -479,63 +537,186 @@ export class TocMindmapComponent {
       // 首次创建
       svg.innerHTML = '';
       this.state.markmap = Markmap.create(svg, options, root);
-      // 只在首次创建时自动适应视图
-      setTimeout(() => this.state.markmap?.fit(), 100);
+      // 初始适应视图
+      setTimeout(() => {
+        this.state.markmap?.fit();
+      }, this.DELAYS.INITIAL_FIT);
     }
 
     // 保存当前数据用于下次状态保持
     this.state.lastMarkmapData = root;
   }
 
-  private _buildTocMarkdown(headings: Array<{level: number, text: string, id: string}>): string {
+  // --- 工具方法：标题处理 ---
+
+  /**
+   * 构建用于渲染思维导图的 Markdown 内容
+   *
+   * 将标题数组转换为 Markdown 格式
+   * 例如：
+   * # 第一章
+   * ## 第一节
+   * ### (2)项目文件
+   *
+   * @param headings 包含标题信息的数组
+   * @returns 格式化的 Markdown 字符串
+   */
+  private _buildTocMarkdown(headings: HeadingInfo[]): string {
     return headings.map(h => `${'#'.repeat(h.level)} ${h.text}`).join('\n');
   }
 
-  private async _getDocumentHeadings() {
-    const headings: Array<{level: number, text: string, id: string}> = [];
+  /**
+   * 获取文档中的所有标题元素
+   *
+   * @returns 标题元素数组，如果文档编辑区不存在则返回空数组
+   */
+  private _getAllHeadingElements(): HTMLElement[] {
     const write = document.querySelector('#write');
     if (!write) return [];
-
-    const headingElements = Array.from(write.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-    for (const h of headingElements) {
-      const text = (h as HTMLElement).innerText.trim();
-      if (text) {
-        headings.push({
-          level: parseInt(h.tagName.substring(1)),
-          text,
-          id: h.id || `heading-${headings.length}`,
-        });
-      }
-    }
-    return headings;
+    return Array.from(write.querySelectorAll('h1, h2, h3, h4, h5, h6'));
   }
 
+  /**
+   * 获取文档中的所有标题，并为每个标题构建完整路径
+   *
+   * 路径格式：从根节点到当前节点的文本拼接，用换行符分隔
+   * 例如：`第一章\n第一节\n(2)项目文件`
+   *
+   * @returns 包含标题信息和路径的数组
+   */
+  private async _getDocumentHeadings(): Promise<void> {
+    this.state.headingsMap.clear();
+    const headingElements = this._getAllHeadingElements();
+    const pathStack: string[] = []; // 路径栈，用于构建层级路径
+
+    for (let i = 0; i < headingElements.length; i++) {
+      const h = headingElements[i];
+      const text = h.innerText.trim();
+      if (!text) continue;
+
+      const level = parseInt(h.tagName.substring(1));
+
+      // 调整路径栈到当前层级
+      pathStack.length = level - 1;
+      pathStack.push(text);
+
+      const path = pathStack.join('\n'); // 完整路径
+
+      const headingInfo = {
+        level,
+        text,
+        id: h.id || `heading-${i}`,
+        index: i,
+        path,
+        element: h
+      };
+      this.state.headingsMap.set(path, headingInfo);
+    }
+  }
+
+  /**
+   * 处理思维导图节点点击跳转到对应标题
+   *
+   * 通过完整路径精确匹配标题，路径格式：`第一章\n第一节\n标题`
+   * 即使有相同文本的标题，路径也能保证唯一性
+   */
   private _scrollToHeadingByNode(nodeEl: Element) {
-    const nodeText = nodeEl.textContent?.trim();
-    if (!nodeText) return;
+    // d3.js 会将节点数据绑定到 __data__ 属性上
+    const nodeData = (nodeEl as any).__data__;
+    const path = nodeData?.payload?.path; // 直接从数据对象读取路径
 
-    const write = document.querySelector('#write');
-    if (!write) return;
+    if (!path) {
+      logger('无法从节点数据中获取路径', 'warn');
+      return;
+    }
 
-    const allHeadings = write.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    for (const heading of Array.from(allHeadings)) {
-      if (heading.textContent?.trim() === nodeText) {
-        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
+    const heading = this.state.headingsMap.get(path);
+
+    if (heading) {
+      logger(`跳转到标题: ${path.split('\n').join(' > ')}`);
+      this._scrollToElement(heading.element);
+    } else {
+      logger(`\n=== 路径匹配失败 ===`);
+      logger(`节点路径: "${path}"`);
+      logger(`\n文档中的所有路径:`);
+      this.state.headingsMap.forEach((h, p) => {
+        const match = p === path ? '✓' : '✗';
+        logger(`[${match}] "${p}"`);
+      });
+      logger(`===================\n`);
+    }
+  }
+
+  /**
+   * 滚动到指定元素
+   *
+   * @param element 目标元素
+   */
+  private _scrollToElement(element: HTMLElement) {
+    const originalMargin = element.style.scrollMarginTop;
+    element.style.scrollMarginTop = `${this.settings.scrollOffsetTop}px`;
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      element.style.scrollMarginTop = originalMargin;
+    }, this.DELAYS.SCROLL_MARGIN_RESET);
+  }
+
+  /**
+   * 为思维导图节点添加完整路径信息
+   *
+   * 递归遍历节点树，为每个节点构建从根到当前节点的完整路径
+   *
+   * @param node 当前处理的节点
+   * @param parentPath 父节点的路径
+   */
+  private _addNodePath(node: any, parentPath = ''): void {
+    if (node.content) {
+      // 解码 HTML 实体，确保路径与文档标题一致
+      const decodedContent = this._decodeHtmlEntities(node.content);
+      const currentPath = parentPath ? `${parentPath}\n${decodedContent}` : decodedContent;
+      node.payload = node.payload || {};
+      node.payload.path = currentPath;
+    }
+
+    if (node.children) {
+      for (const child of node.children) {
+        this._addNodePath(child, node.payload?.path || '');
       }
     }
+  }
+
+
+
+  /**
+   * 解码 HTML 实体
+   *
+   * 将 HTML 实体（如 &lt; &gt; &amp;）转换为对应的字符
+   *
+   * @param text 包含 HTML 实体的文本
+   * @returns 解码后的文本
+   */
+  private _decodeHtmlEntities(text: string): string {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
   }
 
   private _zoomIn() {
     if (!this.state.markmap) return;
     const zoomStep = this.settings.zoomStep ?? 0.2;
-    this.state.markmap.svg.transition().duration(250).call(this.state.markmap.zoom.scaleBy, 1 + zoomStep);
+    this.state.markmap.svg
+      .transition()
+      .duration(this.DELAYS.ZOOM_TRANSITION)
+      .call(this.state.markmap.zoom.scaleBy, 1 + zoomStep);
   }
 
   private _zoomOut() {
     if (!this.state.markmap) return;
     const zoomStep = this.settings.zoomStep ?? 0.2;
-    this.state.markmap.svg.transition().duration(250).call(this.state.markmap.zoom.scaleBy, 1 / (1 + zoomStep));
+    this.state.markmap.svg
+      .transition()
+      .duration(this.DELAYS.ZOOM_TRANSITION)
+      .call(this.state.markmap.zoom.scaleBy, 1 / (1 + zoomStep));
   }
 
   private _toggleEmbed() {
@@ -588,7 +769,7 @@ export class TocMindmapComponent {
     // 移除自动适应视图调用，保持用户当前的缩放状态
   }
 
-  private _fitToView(event?: MouseEvent) {
+  private async _fitToView(event?: MouseEvent) {
     if (!this.state.markmap || !this.state.element) return;
 
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
@@ -596,7 +777,7 @@ export class TocMindmapComponent {
 
     // 检查是否是用户主动点击适应视图按钮
     const isUserClick = event && event.type === 'click';
-    
+
     if (isUserClick) {
       // 用户主动点击时，提供智能适应视图
       const currentHeadingObj = this._getCurrentVisibleHeading();
@@ -606,55 +787,55 @@ export class TocMindmapComponent {
         return;
       }
 
-      const currentHeading = currentHeadingObj.text;
-      logger(`当前可见标题: "${currentHeading}"`);
+      const currentPath = currentHeadingObj.path;
+      logger(`当前可见标题: ${currentPath.split('\n').join(' > ')}`);
 
-      const nodeElements = svg.querySelectorAll('g > foreignObject');
-      let targetElement = null;
-
-      for (const nodeEl of Array.from(nodeElements)) {
-        const textContent = nodeEl.textContent?.trim() || '';
-        if (textContent === currentHeading) {
-          targetElement = nodeEl.parentElement;
-          logger(`找到匹配节点: "${textContent}"`);
-          break;
-        }
-      }
+      const targetElement = this._findNodeByPath(currentPath);
 
       if (targetElement) {
-        const transform = zoomTransform(svg);
-        const scale = this._calculateOptimalScale(targetElement, currentHeadingObj, transform.k);
-        logger(`计算出的缩放比例: ${scale}`);
-
-        const svgRect = svg.getBoundingClientRect();
-        const nodeRect = targetElement.getBoundingClientRect();
-
-        const originalNodeX =
-          (nodeRect.left - svgRect.left - transform.x) / transform.k +
-          nodeRect.width / (2 * transform.k);
-        const originalNodeY =
-          (nodeRect.top - svgRect.top - transform.y) / transform.k +
-          nodeRect.height / (2 * transform.k);
-
-        const newTransform = zoomIdentity
-          .translate(svg.clientWidth / 2, svg.clientHeight / 2)
-          .scale(scale)
-          .translate(-originalNodeX, -originalNodeY);
-
-        this.state.markmap.svg
-          .transition()
-          .duration(500)
-          .call(this.state.markmap.zoom.transform, newTransform);
-
-        logger(`以当前标题节点适应视图: "${currentHeading}"，缩放比例: ${scale}`);
+        this._panAndZoomToNode(targetElement, currentHeadingObj);
       } else {
-        // 如果在思维导图中未找到匹配节点，则使用默认适应视图
         this.state.markmap.fit();
       }
     } else {
-      // 非用户主动点击时，不执行任何适应视图操作
       logger('非用户主动操作，跳过适应视图');
     }
+  }
+
+  /**
+   * 平移并缩放视图以聚焦于指定节点
+   * @param targetElement 目标 SVG 元素
+   * @param headingObj 对应的标题对象
+   */
+  private _panAndZoomToNode(targetElement: Element, headingObj: any) {
+    if (!this.state.markmap || !this.state.element) return;
+    const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
+    if (!svg) return;
+
+    const transform = zoomTransform(svg);
+    const scale = this._calculateOptimalScale(targetElement, headingObj, transform.k);
+
+    const svgRect = svg.getBoundingClientRect();
+    const nodeRect = targetElement.getBoundingClientRect();
+
+    const originalNodeX =
+      (nodeRect.left - svgRect.left - transform.x) / transform.k +
+      nodeRect.width / (2 * transform.k);
+    const originalNodeY =
+      (nodeRect.top - svgRect.top - transform.y) / transform.k +
+      nodeRect.height / (2 * transform.k);
+
+    const newTransform = zoomIdentity
+      .translate(svg.clientWidth / 2, svg.clientHeight / 2)
+      .scale(scale)
+      .translate(-originalNodeX, -originalNodeY);
+
+    this.state.markmap.svg
+      .transition()
+      .duration(this.DELAYS.FIT_TRANSITION)
+      .call(this.state.markmap.zoom.transform, newTransform);
+
+    logger(`适应视图完成，缩放比例: ${scale.toFixed(2)}`);
   }
 
   private _calculateOptimalScale(nodeElement: Element, headingObj: any, currentScale: number): number {
@@ -672,10 +853,6 @@ export class TocMindmapComponent {
       const nodeHeightAtScale1 = nodeHeight / currentScale;
       const scale = documentSize / nodeHeightAtScale1;
 
-      logger(
-        `正文字体: ${documentSize.toFixed(1)}px, 节点测量高度: ${nodeHeight.toFixed(1)}px, 当前缩放: ${currentScale.toFixed(2)}, 节点真实高度: ${nodeHeightAtScale1.toFixed(1)}px, 计算新缩放: ${scale.toFixed(2)}`
-      );
-
       return scale;
     } catch (error) {
       logger(`计算缩放比例失败: ${error.message}`, 'error');
@@ -683,30 +860,49 @@ export class TocMindmapComponent {
     }
   }
 
+  /**
+   * 获取当前视口中可见的标题
+   *
+   * 优先返回视口内的第一个标题，如果没有则返回距离视口最近的标题
+   *
+   * @returns 标题信息对象，包含文本、层级、元素、索引和路径
+   */
   private _getCurrentVisibleHeading() {
-    const write = document.querySelector('#write');
-    if (!write) return null;
+    const headings = this._getAllHeadingElements();
+    if (headings.length === 0) return null;
 
-    const headings = Array.from(write.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     const viewportTop = window.scrollY;
     const viewportBottom = viewportTop + window.innerHeight;
 
+    // 用于构建路径
+    const pathStack: string[] = [];
+
     let closestHeading = null;
     let minDistance = Infinity;
+    let validIndex = 0;
 
     for (const heading of headings) {
-      const rect = heading.getBoundingClientRect();
-      const elementTop = rect.top + window.scrollY;
       const text = heading.textContent?.trim() || '';
-
       if (!text) continue;
 
+      const level = parseInt(heading.tagName.substring(1));
+
+      // 构建路径
+      pathStack.length = level - 1;
+      pathStack.push(text);
+      const path = pathStack.join('\n');
+
+      const rect = heading.getBoundingClientRect();
+      const elementTop = rect.top + window.scrollY;
+
       // 优先选择在视口内的第一个标题
-      if (elementTop >= viewportTop - 100 && elementTop <= viewportBottom) {
+      if (elementTop >= viewportTop - this.VIEWPORT_OFFSET && elementTop <= viewportBottom) {
         return {
           text,
-          level: parseInt(heading.tagName.substring(1)),
+          level,
           element: heading,
+          index: validIndex,
+          path,
         };
       }
 
@@ -716,23 +912,44 @@ export class TocMindmapComponent {
         minDistance = distance;
         closestHeading = {
           text,
-          level: parseInt(heading.tagName.substring(1)),
+          level,
           element: heading,
+          index: validIndex,
+          path,
         };
       }
+
+      validIndex++;
     }
 
-    // 如果循环结束都没有找到视口内的标题，则返回距离最近的那个
     return closestHeading;
+  }
+
+  /**
+   * 根据路径查找 SVG 节点
+   * @param path 节点的完整路径
+   * @returns 匹配的 SVG 元素，如果未找到则返回 null
+   */
+  private _findNodeByPath(path: string): Element | null {
+    if (!this.state.element) return null;
+    const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
+    if (!svg) return null;
+
+    const nodeElements = svg.querySelectorAll('g.markmap-node');
+    for (const nodeEl of Array.from(nodeElements)) {
+      const nodeData = (nodeEl as any).__data__;
+      const nodePath = nodeData?.payload?.path;
+      if (nodePath === path) {
+        return nodeEl;
+      }
+    }
+    return null;
   }
 
   private _renderEmpty(svg: SVGElement) {
     svg.innerHTML = '<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle">当前文档没有标题</text>';
   }
 
-  private _renderError(svg: SVGElement, message: string) {
-    svg.innerHTML = `<text x="10" y="20" fill="red">渲染错误: ${message}</text>`;
-  }
 
   // --- 实时更新相关方法 ---
 
@@ -787,49 +1004,60 @@ export class TocMindmapComponent {
   }
 
   /**
-   * 初始化 MutationObserver（优化版本）
+   * 初始化 MutationObserver（高性能优化版本）
+   * 只监听标题元素的变化，忽略其他内容的修改
    */
   private _initMutationObserver() {
     const writeElement = document.querySelector('#write');
     if (!writeElement) return;
 
     this.state.contentObserver = new MutationObserver((mutations) => {
-      // 检查是否有任何可能影响标题的变化
-      const hasRelevantChanges = mutations.some(mutation => {
-        // 检查子节点变化（新增/删除元素）
+      // 只检查与标题相关的变化
+      const hasHeadingChanges = mutations.some(mutation => {
+        const target = mutation.target as HTMLElement;
+
+        // 检查是否是标题元素或其父元素
+        const isHeadingRelated = (node: Node): boolean => {
+          if (node.nodeType !== Node.ELEMENT_NODE) {
+            // 如果是文本节点，检查其父元素
+            return node.parentElement?.tagName.match(/^H[1-6]$/) !== null;
+          }
+          const element = node as HTMLElement;
+          // 检查是否是标题元素
+          if (element.tagName.match(/^H[1-6]$/)) return true;
+          // 检查子元素中是否包含标题
+          return element.querySelector('h1, h2, h3, h4, h5, h6') !== null;
+        };
+
+        // 只关注标题相关的变化
         if (mutation.type === 'childList') {
-          return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+          // 检查新增或删除的节点是否包含标题
+          const addedHasHeading = Array.from(mutation.addedNodes).some(isHeadingRelated);
+          const removedHasHeading = Array.from(mutation.removedNodes).some(isHeadingRelated);
+          return addedHasHeading || removedHasHeading;
         }
-        
-        // 检查文本内容变化
+
         if (mutation.type === 'characterData') {
-          return true;
+          // 只关注标题内的文本变化
+          return isHeadingRelated(target);
         }
-        
-        // 检查属性变化
-        if (mutation.type === 'attributes') {
-          return true;
-        }
-        
+
         return false;
       });
 
-      if (hasRelevantChanges) {
-        logger('检测到文档内容变化，准备更新思维导图');
+      if (hasHeadingChanges) {
         this.debouncedUpdate();
       }
     });
 
+    // 只监听必要的变化类型，不监听属性变化
     this.state.contentObserver.observe(writeElement, {
       childList: true,
       subtree: true,
       characterData: true,
-      attributes: true,
-      attributeOldValue: true,
-      characterDataOldValue: true
     });
 
-    logger('MutationObserver 已启动，监听范围：childList, subtree, characterData, attributes');
+    logger('MutationObserver 已启动（优化模式：仅监听标题变化）');
   }
 
   private _cleanupRealTimeUpdate() {
@@ -844,20 +1072,23 @@ export class TocMindmapComponent {
     if (!this.isVisible) return;
 
     try {
-      const headings = await this._getDocumentHeadings();
-      const currentHash = this._getHeadingsHash(headings);
-
-      if (currentHash !== this.state.lastHeadingsHash) {
-        this.state.lastHeadingsHash = currentHash;
-        await this._update();
-      }
+      await this._update();
     } catch (error) {
       logger(`处理内容变化时出错: ${error.message}`, 'error', error);
     }
   }
 
-  private _getHeadingsHash(headings: Array<{level: number, text: string, id: string}>): string {
-    return headings.map(h => `${h.level}:${h.text}`).join('|');
+  /**
+   * 生成标题数组的哈希值
+   *
+   * 用于检测标题内容是否发生变化，避免不必要的重新渲染
+   * 哈希值包含：层级、文本内容、索引和路径
+   *
+   * @param headings 标题数组
+   * @returns 哈希字符串
+   */
+  private _getHeadingsHash(headings: HeadingInfo[]): string {
+    return headings.map(h => `${h.index}:${h.path}`).join('|');
   }
 
   /**
@@ -867,37 +1098,39 @@ export class TocMindmapComponent {
   private _preserveFoldState(newRoot: any) {
     if (!this.settings.keepFoldStateWhenUpdate || !this.state.lastMarkmapData) return;
 
-    // 构建路径映射函数
-    const buildPath = (node: any, parent?: any): string => {
-      const parentPath = (parent && parent.__path) || '';
-      return `${parentPath}\n${node.content}`;
-    };
+    const foldedPaths = new Set<string>();
 
-    // 遍历函数
-    const traverse = (node: any, fn: (node: any) => void, parent?: any) => {
-      node.__path = buildPath(node, parent);
-      fn(node);
+    // 简单的递归遍历函数，用于收集路径
+    const collectFoldedPaths = (node: any) => {
+      if (node.payload?.fold && node.payload?.path) {
+        foldedPaths.add(node.payload.path);
+      }
       if (node.children) {
         for (const child of node.children) {
-          traverse(child, fn, node);
+          collectFoldedPaths(child);
         }
       }
     };
 
-    // 收集需要折叠的节点路径
-    const foldedPaths = new Set<string>();
-    traverse(this.state.lastMarkmapData, (node) => {
-      if (node.payload && node.payload.fold) {
-        foldedPaths.add(node.__path);
-      }
-    });
+    // 从旧数据中收集折叠节点的路径
+    collectFoldedPaths(this.state.lastMarkmapData);
 
-    // 恢复折叠状态
-    traverse(newRoot, (node) => {
-      if (node.payload && foldedPaths.has(node.__path)) {
+    if (foldedPaths.size === 0) return; // 如果没有需要恢复的折叠状态，则提前退出
+
+    // 简单的递归遍历函数，用于应用状态
+    const applyFoldState = (node: any) => {
+      if (node.payload?.path && foldedPaths.has(node.payload.path)) {
         node.payload.fold = 1;
       }
-    });
+      if (node.children) {
+        for (const child of node.children) {
+          applyFoldState(child);
+        }
+      }
+    };
+
+    // 在新数据上恢复折叠状态
+    applyFoldState(newRoot);
 
     logger(`恢复了 ${foldedPaths.size} 个节点的折叠状态`);
   }
