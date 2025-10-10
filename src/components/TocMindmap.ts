@@ -623,7 +623,7 @@ export class TocMindmapComponent {
   private async _getDocumentHeadings(): Promise<void> {
     this.state.headingsMap.clear();
     const headingElements = this._getAllHeadingElements();
-    const pathStack: string[] = []; // 路径栈，用于构建层级路径
+    const pathStack: (string | null)[] = []; // 路径栈，用于构建层级路径，允许null表示跳过的层级
 
     for (let i = 0; i < headingElements.length; i++) {
       const h = headingElements[i];
@@ -632,11 +632,19 @@ export class TocMindmapComponent {
 
       const level = parseInt(h.tagName.substring(1));
 
-      // 调整路径栈到当前层级
-      pathStack.length = level - 1;
+      // 调整路径栈到当前层级，保持层级跳跃时的完整性
+      if (pathStack.length >= level) {
+        pathStack.length = level - 1;
+      } else {
+        // 填充中间跳过的层级为null
+        while (pathStack.length < level - 1) {
+          pathStack.push(null);
+        }
+      }
       pathStack.push(text);
 
-      const path = pathStack.join('\n'); // 完整路径
+      // 构建路径时过滤掉null值
+      const path = pathStack.filter(p => p !== null).join('\n');
 
       const headingInfo = {
         level,
