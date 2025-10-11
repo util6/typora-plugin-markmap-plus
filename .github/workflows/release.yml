@@ -1,0 +1,75 @@
+# 自动发布工作流
+name: Release
+
+# 触发条件：当推送以 'v' 开头的标签时（如 v1.0.0）
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # 授予写入仓库内容的权限，用于创建 release
+    permissions:
+      contents: write
+
+    steps:
+      # 检出代码
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # 设置 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # 安装项目依赖
+      - name: Install dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      # 构建生产版本
+      - name: Build
+        run: npm run build:prod
+
+      # 生成更新说明（从上一个版本到当前版本的所有commit）
+      - name: Generate changelog
+        run: |
+          # 获取上一个tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # 生成changelog
+          if [ -n "$PREV_TAG" ]; then
+            echo "## 🚀 更新内容" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "**完整提交记录 (${PREV_TAG}...${GITHUB_REF_NAME}):**" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> CHANGELOG.md
+          else
+            echo "## 🚀 首次发布" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "**所有提交记录:**" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" >> CHANGELOG.md
+          fi
+
+      # 创建发布包
+      - name: Create release package
+        run: |
+          cd dist
+          zip -r ../plugin.zip .
+          cd ..
+          ls -la *.zip
+
+      # 创建 GitHub Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plugin.zip
+          body_path: CHANGELOG.md

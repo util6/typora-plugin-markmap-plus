@@ -12,6 +12,9 @@ import virtual from '@rollup/plugin-virtual'
 import { virtualModules } from 'rollup-plugin-typora'
 
 
+import strip from '@rollup/plugin-strip'
+
+
 const { compilerOptions } = JSON.parse(await fs.readFile('./tsconfig.json', 'utf8'))
 
 const overrided = {
@@ -27,6 +30,9 @@ const overrided = {
 await fs.rm('./dist', { recursive: true, force: true })
 await fs.mkdir('./dist')
 
+// 复制 manifest.json 文件 - 这是插件加载的关键文件
+await fs.cp('./src/manifest.json', './dist/manifest.json')
+
 await fs.cp('./node_modules/katex/dist/katex.min.js', './dist/katex.min.js')
 await fs.cp('./node_modules/katex/dist/katex.min.css', './dist/katex.min.css')
 
@@ -36,17 +42,20 @@ await Promise.all(woff2.map(file =>
   fs.cp(`./node_modules/katex/dist/fonts/${file}`, `./dist/fonts/${file}`, { recursive: true })
 ))
 
+const isProduction = process.env.NODE_ENV === 'production'
 
 export default defineConfig({
   input: 'src/main.ts',
   output: {
-    file: 'dist/main.js',
+    dir: 'dist',
     format: 'es',
+    entryFileNames: 'main.js',
+    chunkFileNames: 'chunks/[name]-[hash].js',
   },
   plugins: [
     replace({
       preventAssignment: true,
-      'process.env.IS_DEV': 'false',
+      'process.env.IS_DEV': JSON.stringify(isProduction),
     }),
     virtual(virtualModules),
     nodeResolve(),
@@ -69,6 +78,10 @@ export default defineConfig({
       fileName: 'style.css',
       processor: (css, map) => ({ css: css.replace(/\n+\s*/g, '') }),
     }),
+    isProduction && strip({
+      include: 'src/**/*.ts',
+      functions: ['logger'],
+    }),
     terser(),
-  ],
+  ].filter(Boolean),
 })

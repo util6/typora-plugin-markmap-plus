@@ -1,12 +1,12 @@
 /**
  * Typora Markmap Plus 插件主入口文件
- *
+ * 
  * 功能说明：
  * - 为 Typora 添加交互式思维导图功能
  * - 提供目录思维导图（TOC Mindmap）
  * - 支持窗口拖动和调整大小
  * - 提供悬浮按钮快速访问
- *
+ * 
  * @author util6
  * @version 1.0.3
  */
@@ -108,13 +108,13 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       // 创建 Markmap 转换器，获取所需的样式和脚本
       const transformer = new Transformer(builtInPlugins);
       const { styles, scripts } = transformer.getAssets();
-
+      
       // 异步加载 CSS 样式
       if (styles) await loadCSS(styles);
-
+      
       // 异步加载 JavaScript 脚本
       if (scripts) await loadJS(scripts);
-
+      
       this.resourcesLoaded = true;
       logger('Markmap 资源加载成功');
     } catch (error) {

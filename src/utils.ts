@@ -1,11 +1,11 @@
 /**
  * Typora Markmap Plus 插件工具函数模块
- *
+ * 
  * 功能说明：
  * - 提供跨平台兼容性检测
  * - 实现调试日志系统
  * - 提供通用工具函数
- *
+ * 
  * @author util6
  * @version 1.0.3
  */
@@ -33,13 +33,13 @@ export const isWindows = () => navigator.platform.includes('Win')
 const DEBUG_CONFIG = {
   /** 是否启用调试功能 */
   enabled: true,
-
+  
   /** 是否在页面中显示日志（macOS 默认开启） */
   showInPage: isMacOS(),
-
+  
   /** 是否显示时间戳 */
   showTimestamp: true,
-
+  
   /** 不同日志级别的自动移除延迟时间（毫秒） */
   autoRemoveDelay: {
     info: 10000,    // 信息日志 10 秒后移除
@@ -47,7 +47,7 @@ const DEBUG_CONFIG = {
     error: 6000,    // 错误日志 6 秒后移除
     debug: 2000     // 调试日志 2 秒后移除
   },
-
+  
   /** 不同日志级别的颜色配置 */
   colors: {
     info: '#2196F3',    // 蓝色
@@ -55,10 +55,10 @@ const DEBUG_CONFIG = {
     error: '#f44336',   // 红色
     debug: '#9C27B0'    // 紫色
   },
-
+  
   /** 复制成功提示的颜色 */
   copySuccessColor: '#4CAF50',  // 绿色
-
+  
   /** 日志级别过滤 */
   logLevel: 'info' as 'debug' | 'info' | 'warn' | 'error'
 }
@@ -68,7 +68,7 @@ const DEBUG_CONFIG = {
 /**
  * 跨平台日志输出函数
  * 在 macOS 下使用页面显示，Windows 下使用 console
- *
+ * 
  * @param message 日志消息内容
  * @param level 日志级别：debug | info | warn | error
  * @param data 可选的附加数据对象
@@ -98,14 +98,14 @@ export function logger(message: string, level: 'debug' | 'info' | 'warn' | 'erro
 /**
  * 页面消息显示函数（主要用于 macOS 调试）
  * 在页面右上角显示浮动消息，支持点击复制
- *
+ * 
  * @param message 要显示的消息内容
  * @param type 消息类型，影响颜色显示
  */
 function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'info') {
   // 创建消息元素
   const messageDiv = document.createElement('div')
-
+  
   // 计算垂直位置（避免重叠）
   const existingMessages = document.querySelectorAll('[data-debug-message]')
   const topOffset = 10 + (existingMessages.length * 40)
@@ -128,7 +128,7 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
     line-height: 1.4;
     cursor: pointer;
   `
-
+  
   // 标记为调试消息
   messageDiv.setAttribute('data-debug-message', 'true')
   messageDiv.textContent = message
@@ -139,7 +139,7 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
       // 显示复制成功反馈
       messageDiv.style.background = DEBUG_CONFIG.copySuccessColor
       messageDiv.textContent = '已复制到剪贴板'
-
+      
       // 1秒后恢复原状
       setTimeout(() => {
         messageDiv.textContent = message
@@ -202,7 +202,7 @@ export class PerformanceMonitor {
 /**
  * 统一错误处理函数
  * 提供一致的错误日志格式和跨平台显示
- *
+ * 
  * @param error 错误对象或错误信息
  * @param context 错误发生的上下文描述
  */
@@ -221,7 +221,7 @@ export function handleError(error: unknown, context: string) {
 /**
  * 调试断点工具（针对 macOS 调试困难的解决方案）
  * 在 macOS 下使用页面显示，在 Windows 下使用 debugger
- *
+ * 
  * @param label 断点标签
  * @param data 可选的调试数据
  */
@@ -242,7 +242,7 @@ export function debugBreakpoint(label: string, data?: any) {
 /**
  * 状态检查工具
  * 检查条件是否满足，并记录结果
- *
+ * 
  * @param condition 要检查的条件
  * @param message 检查描述
  * @returns 检查结果
@@ -259,7 +259,7 @@ export function checkState(condition: boolean, message: string) {
 /**
  * DOM 元素检查工具
  * 查找并验证 DOM 元素是否存在
- *
+ * 
  * @param selector CSS 选择器
  * @param context 上下文描述
  * @returns 找到的元素或 null
@@ -279,7 +279,7 @@ export function checkElement(selector: string, context: string = '未知'): HTML
 /**
  * 配置调试开关
  * 动态启用或禁用调试功能
- *
+ * 
  * @param enabled 是否启用调试
  */
 export function setDebugMode(enabled: boolean) {
@@ -290,7 +290,7 @@ export function setDebugMode(enabled: boolean) {
 /**
  * 获取调试信息
  * 返回当前环境和调试状态的详细信息
- *
+ * 
  * @returns 调试信息对象
  */
 export function getDebugInfo() {
@@ -314,8 +314,8 @@ export function getDebugInfo() {
  * @returns 防抖后的函数
  */
 export function debounce<T extends (...args: any[]) => any>(
-    func: T,
-    wait: number
+  func: T,
+  wait: number
 ): (...args: Parameters<T>) => void {
   let timeout: number | undefined;
 

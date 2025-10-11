@@ -52,47 +52,35 @@ type HeadingInfo = {
 const resolveImagePath: ITransformPlugin = {
   name: 'resolveImagePath',
   transform(ctx) {
-    // 注入自定义渲染规则到 markdown-it 解析器
     ctx.parser.tap((md: any) => {
-      // 默认的 token 渲染函数
       const defaultRender = function (tokens: any, idx: number, options: any, env: any, self: any) {
         return self.renderToken(tokens, idx, options)
       }
 
-      // 保存原始的图片渲染规则
       const defaultImageRender = md.renderer.rules.image || defaultRender
 
-      // 重写图片渲染规则：将相对路径转换为绝对路径
       md.renderer.rules.image = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
         const token = tokens[idx]
 
-        // 获取图片的 src 属性
         const src = token.attrGet('src')
         if (src) {
-          // 使用 Typora 的 API 将相对路径转换为绝对路径
           token.attrSet('src', editor.imgEdit.getRealSrc(src))
         }
 
-        // 调用原始渲染函数完成渲染
         return defaultImageRender(tokens, idx, options, env, self)
       }
 
-      // 保存原始的内联 HTML 渲染规则
       const defaultHtmlInlineRender = md.renderer.rules.html_inline || defaultRender
 
-      // 重写内联 HTML 渲染规则：处理 <img> 标签中的相对路径
       md.renderer.rules.html_inline = (tokens: any[], idx: number, options: any, env: any, self: any): string => {
         const token = tokens[idx] as { content: string }
 
-        // 检查是否是 <img> 标签
         if (token.content.startsWith('<img')) {
-          // 使用正则表达式替换 src 属性中的相对路径
           token.content = token.content.replace(/ src=(["'])([^'"]+)\1/, (_, __, $relativePath) => {
             return ` src="${editor.imgEdit.getRealSrc($relativePath)}"`
           })
         }
 
-        // 调用原始渲染函数完成渲染
         return defaultHtmlInlineRender(tokens, idx, options, env, self)
       }
     })
@@ -184,29 +172,6 @@ const COMPONENT_STYLE = `
     width: 100%;
     height: 100%;
   }
-
-  /* 导出菜单样式 */
-  .markmap-export-menu {
-    position: absolute;
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    z-index: 10000;
-    padding: 4px 0;
-    min-width: 120px;
-  }
-
-  .markmap-export-item {
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 14px;
-    color: #333;
-  }
-
-  .markmap-export-item:hover {
-    background-color: #f5f5f5;
-  }
 `;
 
 // =======================================================
@@ -219,8 +184,8 @@ const COMPONENT_TEMPLATE = `
       <button class="markmap-toc-btn" data-action="dock-left" title="嵌入侧边栏">📌</button>
       <button class="markmap-toc-btn" data-action="zoom-in" title="放大">🔍+</button>
       <button class="markmap-toc-btn" data-action="zoom-out" title="缩小">🔍-</button>
+      <button class="markmap-toc-btn" data-action="refresh" title="刷新">🔄</button>
       <button class="markmap-toc-btn" data-action="fit" title="适应视图">🎯</button>
-      <button class="markmap-toc-btn" data-action="export" title="导出">💾</button>
       <button class="markmap-toc-btn" data-action="close" title="关闭">×</button>
     </div>
   </div>
@@ -281,27 +246,13 @@ export class TocMindmapComponent {
    */
   private readonly VIEWPORT_OFFSET = 100;
 
-  // ==================== 依赖注入与初始化 ====================
-
-  /**
-   * 构造函数
-   *
-   * 初始化组件所需的核心依赖：
-   * 1. 创建 Markmap 转换器（包含内置插件和图片路径解析插件）
-   * 2. 注入组件样式到页面
-   * 3. 初始化高亮样式
-   *
-   * @param settings 插件设置对象，包含所有用户配置
-   */
+  // 依赖注入：从父组件获取所需的 "props"
   constructor(
-      private settings: MarkmapSettings
+    private settings: MarkmapSettings
   ) {
-    // 创建 Markmap 转换器，集成所有必要的插件
     this.transformer = new Transformer([...builtInPlugins, resolveImagePath]);
-    // 将组件样式注入到页面 <head> 中
     this._injectStyle();
-    // 根据用户设置初始化高亮样式
-    this._updateHighlightStyle();
+    this._updateHighlightStyle(); // 初始化时注入高亮样式
   }
 
   /**
@@ -327,61 +278,28 @@ export class TocMindmapComponent {
     }
   }
 
-  // ==================== 组件状态管理 ====================
-
-  /**
-   * 组件内部状态
-   * 集中管理所有可变状态，类似 Vue 的 data 选项
-   */
+  // 集中化的内部状态，类似 Vue 的 data
   private state = {
-    /** 组件的根 DOM 元素 */
     element: null as HTMLElement | null,
-    /** Markmap 实例，用于渲染和控制思维导图 */
     markmap: null as any | null,
-    /** 是否处于侧边栏嵌入模式 */
     isEmbedded: false,
-    /** 监听侧边栏尺寸变化的观察器 */
     resizeObserver: null as ResizeObserver | null,
-    /** 监听文档内容变化的观察器 */
     contentObserver: null as MutationObserver | null,
-    /** 上次标题内容的哈希值，用于检测变化 */
     lastHeadingsHash: '',
-    /** 上次的 markmap 数据，用于保持节点折叠状态 */
-    lastMarkmapData: null as any,
-    /** 标题信息缓存，key 为路径，value 为标题信息 */
-    headingsMap: new Map<string, HeadingInfo>(),
+    lastMarkmapData: null as any, // 保存上次的 markmap 数据用于状态保持
+    headingsMap: new Map<string, HeadingInfo>(), // 缓存最新的标题信息，用于跳转匹配
   };
 
-  /** Markmap 转换器实例，用于将 Markdown 转换为思维导图数据 */
   private transformer: Transformer;
+  private debouncedUpdate = debounce(this._handleContentChange.bind(this), 200); // 适中的防抖时间
 
-  /** 防抖处理的更新函数，避免频繁更新导致性能问题 */
-  private debouncedUpdate = debounce(this._handleContentChange.bind(this), 200);
-
-  // ==================== 计算属性 ====================
-
-  /**
-   * 组件是否可见
-   * 类似 Vue 的 computed 属性，根据 DOM 状态动态计算
-   */
+  // 模拟计算属性，类似 Vue 的 computed
   get isVisible(): boolean {
     return !!(this.state.element && this.state.element.style.display !== 'none');
   }
 
-  // ==================== 公共 API ====================
+  // --- 公共 API ---
 
-  /**
-   * 显示思维导图窗口
-   *
-   * 执行流程：
-   * 1. 检查是否已显示，避免重复创建
-   * 2. 创建 DOM 元素并添加到页面
-   * 3. 绑定事件监听器
-   * 4. 初始化实时更新功能
-   * 5. 渲染思维导图内容
-   *
-   * @throws 如果显示失败会抛出错误并自动清理
-   */
   public show = async () => {
     if (this.isVisible) return;
 
@@ -399,16 +317,6 @@ export class TocMindmapComponent {
     }
   }
 
-  /**
-   * 隐藏思维导图窗口
-   *
-   * 执行清理工作：
-   * 1. 清理 InteractJS 实例（拖动和调整大小功能）
-   * 2. 从 DOM 中移除元素
-   * 3. 销毁 Markmap 实例
-   * 4. 清理所有事件监听器和观察器
-   * 5. 重置内部状态
-   */
   public hide = () => {
     if (!this.isVisible) return;
 
@@ -436,9 +344,6 @@ export class TocMindmapComponent {
     logger('TOC 窗口已关闭');
   }
 
-  /**
-   * 切换思维导图窗口的显示/隐藏状态
-   */
   public toggle = async () => {
     if (this.isVisible) {
       this.hide();
@@ -447,30 +352,14 @@ export class TocMindmapComponent {
     }
   }
 
-  /**
-   * 销毁组件
-   *
-   * 完全清理组件，包括：
-   * 1. 隐藏窗口并清理所有资源
-   * 2. 从页面中移除注入的样式表
-   */
   public destroy = () => {
     this.hide();
     // 移除样式表
     document.getElementById('markmap-toc-component-style')?.remove();
   }
 
-  // ==================== 私有方法：DOM 操作 ====================
+  // --- 私有方法 ---
 
-  /**
-   * 创建组件的 DOM 元素
-   *
-   * 1. 创建容器元素并设置样式类
-   * 2. 根据用户设置设置初始宽高
-   * 3. 填充 HTML 模板内容
-   * 4. 添加到页面 body
-   * 5. 初始化 InteractJS（拖动和调整大小功能）
-   */
   private _createElement() {
     const container = document.createElement('div');
     container.className = 'markmap-toc-modal';
@@ -482,13 +371,6 @@ export class TocMindmapComponent {
     this._setupInteractJS();
   }
 
-  /**
-   * 设置 InteractJS 交互功能
-   *
-   * 配置两个核心功能：
-   * 1. 调整大小（resizable）：允许从四个边缘调整窗口大小
-   * 2. 拖动（draggable）：根据嵌入状态和设置动态启用/禁用
-   */
   private _setupInteractJS() {
     if (!this.state.element) return;
 
@@ -497,17 +379,14 @@ export class TocMindmapComponent {
 
     // 设置调整大小功能（始终启用）
     interactInstance.resizable({
-      // 允许从四个边缘调整大小
       edges: { left: true, right: true, bottom: true, top: true },
       listeners: {
         move: (event) => {
           const target = event.target;
-          // 更新元素的尺寸和位置
           target.style.width = `${event.rect.width}px`;
           target.style.height = `${event.rect.height}px`;
           target.style.left = `${event.rect.left}px`;
           target.style.top = `${event.rect.top}px`;
-          // 清除 transform，使用绝对定位
           target.style.transform = 'none';
           target.removeAttribute('data-x');
           target.removeAttribute('data-y');
@@ -519,13 +398,6 @@ export class TocMindmapComponent {
     this._updateInteractSettings();
   }
 
-  /**
-   * 更新 InteractJS 拖动设置
-   *
-   * 根据嵌入状态和用户设置动态调整拖动功能：
-   * - 嵌入状态且不允许拖动：禁用拖动，光标显示为默认
-   * - 其他情况：启用拖动，光标显示为移动图标
-   */
   private _updateInteractSettings() {
     if (!this.state.element) return;
 
@@ -539,18 +411,14 @@ export class TocMindmapComponent {
     } else {
       // 悬浮状态或设置为允许拖动：启用拖动
       interactInstance.draggable({
-        // 只允许从标题栏拖动
         allowFrom: '.markmap-toc-header',
-        // 忽略 SVG 和内容区域的拖动
         ignoreFrom: '.markmap-svg, .markmap-content',
         listeners: {
           move: (event) => {
             const target = event.target;
-            // 累加拖动距离
             const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
             const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
 
-            // 使用 transform 实现拖动，性能更好
             target.style.transform = `translate(${x}px, ${y}px)`;
             target.setAttribute('data-x', x.toString());
             target.setAttribute('data-y', y.toString());
@@ -561,11 +429,6 @@ export class TocMindmapComponent {
     }
   }
 
-  /**
-   * 注入组件样式到页面
-   *
-   * 检查样式是否已存在，避免重复注入
-   */
   private _injectStyle() {
     const styleId = 'markmap-toc-component-style';
     if (document.getElementById(styleId)) return;
@@ -609,33 +472,17 @@ export class TocMindmapComponent {
     `;
   }
 
-  // ==================== 事件处理 ====================
-
-  /** 事件清理函数数组，用于统一管理和清理所有事件监听器 */
   private _eventCleanupFunctions: (() => void)[] = [];
 
-  /**
-   * 绑定事件监听器
-   *
-   * 使用事件委托模式，在组件根元素上监听所有点击事件
-   * 这样只需要一个监听器就能处理所有按钮和节点的点击
-   */
   private _attachEventListeners() {
     if (!this.state.element) return;
 
-    // 绑定点击事件处理器
+    // 使用单一事件委托模式，在组件根元素上监听所有点击
     const boundHandler = this._handleModalClick.bind(this);
     this.state.element.addEventListener('click', boundHandler);
-
-    // 保存清理函数，用于后续移除监听器
     this._eventCleanupFunctions.push(() => this.state.element!.removeEventListener('click', boundHandler));
   }
 
-  /**
-   * 清理所有事件监听器
-   *
-   * 遍历执行所有保存的清理函数，确保没有内存泄漏
-   */
   private _cleanupEventListeners() {
     this._eventCleanupFunctions.forEach(cleanup => cleanup());
     this._eventCleanupFunctions = [];
@@ -663,10 +510,10 @@ export class TocMindmapComponent {
         switch (action) {
           case 'close': this.hide(); break;           // 关闭思维导图窗口
           case 'dock-left': this._toggleEmbed(); break; // 切换侧边栏嵌入状态
+          case 'refresh': await this._update(); break;   // 刷新思维导图内容
           case 'zoom-in': this._zoomIn(); break;         // 放大思维导图
           case 'zoom-out': this._zoomOut(); break;       // 缩小思维导图
           case 'fit': this._fitToView(e as MouseEvent); break; // 适应视图大小
-          case 'export': this._showExportMenu(e as MouseEvent); break; // 显示导出菜单
         }
       } catch (error) {
         logger(`按钮操作失败: ${error.message}`, 'error', error);
@@ -684,31 +531,14 @@ export class TocMindmapComponent {
 
     // 如果既不是按钮也不是节点，不执行任何操作
   }
-  /**
-   * 更新思维导图内容
-   *
-   * 核心渲染流程：
-   * 1. 获取文档中的所有标题
-   * 2. 计算标题哈希值，检查是否有变化
-   * 3. 如果没有变化则跳过更新（性能优化）
-   * 4. 将标题转换为 Markdown 格式
-   * 5. 使用 Markmap 转换器生成思维导图数据
-   * 6. 为节点添加路径信息（用于跳转匹配）
-   * 7. 如果是首次渲染，创建 Markmap 实例
-   * 8. 如果是更新，保持节点折叠状态并更新数据
-   */
   private _update = async () => {
     if (!this.state.element) return;
 
-    // 保存旧的哈希值用于比较
     const oldHash = this.state.lastHeadingsHash;
-    // 获取最新的标题信息
     await this._getDocumentHeadings();
     const headings = Array.from(this.state.headingsMap.values());
-    // 计算新的哈希值
     const newHash = this._getHeadingsHash(headings);
 
-    // 如果内容没有变化，跳过更新
     if (newHash === oldHash) return;
 
     logger('更新 TOC Markmap');
@@ -716,21 +546,17 @@ export class TocMindmapComponent {
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
-    // 如果没有标题，显示空状态提示
     if (this.state.headingsMap.size === 0) {
       this._renderEmpty(svg);
       return;
     }
 
-    // 构建 Markdown 内容
     const markdownContent = this._buildTocMarkdown(headings);
-    // 转换为思维导图数据结构
     const { root } = this.transformer.transform(markdownContent);
 
-    // 为每个节点添加路径信息，用于点击跳转时的精确匹配
+    // 为每个节点添加路径信息
     this._addNodePath(root);
 
-    // 合并用户设置和默认选项
     const options = deriveOptions({
       ...this.MARKMAP_OPTIONS,
       initialExpandLevel: this.settings.initialExpandLevel,
@@ -738,23 +564,22 @@ export class TocMindmapComponent {
     });
 
     if (this.state.markmap) {
-      // 已存在实例，执行更新
-      // 保持用户手动折叠的节点状态
+      // 保持折叠状态
       this._preserveFoldState(root);
 
-      // 更新数据，Markmap 会自动保留当前的缩放和平移状态
+      // 更新数据，这将自动保留当前的缩放和平移状态，实现平滑更新
       this.state.markmap.setData(root, options);
     } else {
-      // 首次创建实例
+      // 首次创建
       svg.innerHTML = '';
       this.state.markmap = Markmap.create(svg, options, root);
-      // 延迟执行初始适应视图，等待渲染完成
+      // 初始适应视图
       setTimeout(() => {
         this.state.markmap?.fit();
       }, this.DELAYS.INITIAL_FIT);
     }
 
-    // 保存当前数据，用于下次更新时保持状态
+    // 保存当前数据用于下次状态保持
     this.state.lastMarkmapData = root;
   }
 
@@ -926,226 +751,49 @@ export class TocMindmapComponent {
     return textarea.value;
   }
 
-  /**
-   * 放大思维导图
-   *
-   * 使用D3的缩放功能，按照设置中的zoomStep比例放大视图
-   * 带有平滑的过渡动画效果
-   */
   private _zoomIn() {
     if (!this.state.markmap) return;
-    // 获取缩放步长，默认0.2表示每次放大20%
     const zoomStep = this.settings.zoomStep ?? 0.2;
     this.state.markmap.svg
-        .transition()
-        .duration(this.DELAYS.ZOOM_TRANSITION)
-        .call(this.state.markmap.zoom.scaleBy, 1 + zoomStep);
+      .transition()
+      .duration(this.DELAYS.ZOOM_TRANSITION)
+      .call(this.state.markmap.zoom.scaleBy, 1 + zoomStep);
   }
 
-  /**
-   * 缩小思维导图
-   *
-   * 使用D3的缩放功能，按照设置中的zoomStep比例缩小视图
-   * 带有平滑的过渡动画效果
-   */
   private _zoomOut() {
     if (!this.state.markmap) return;
-    // 获取缩放步长，使用倒数实现缩小效果
     const zoomStep = this.settings.zoomStep ?? 0.2;
     this.state.markmap.svg
-        .transition()
-        .duration(this.DELAYS.ZOOM_TRANSITION)
-        .call(this.state.markmap.zoom.scaleBy, 1 / (1 + zoomStep));
+      .transition()
+      .duration(this.DELAYS.ZOOM_TRANSITION)
+      .call(this.state.markmap.zoom.scaleBy, 1 / (1 + zoomStep));
   }
 
-  /**
-   * 显示导出菜单
-   * 直接导出SVG文件，不再显示格式选择菜单
-   * @param event 鼠标点击事件
-   */
-  private _showExportMenu(event: MouseEvent) {
-    // 直接导出SVG，不显示菜单
-    this._exportMarkmap('svg');
-  }
-
-  /**
-   * 导出思维导图为SVG文件
-   *
-   * 工作流程：
-   * 1. 克隆当前SVG元素避免影响显示
-   * 2. 计算并设置SVG的实际尺寸（添加边距）
-   * 3. 内联必要的CSS样式到SVG中
-   * 4. 调用下载方法保存文件
-   *
-   * @param format 导出格式 (目前只支持svg)
-   */
-  private async _exportMarkmap(format: 'svg' | 'png') {
-    if (!this.state.element) return;
-
-    const svg = this.state.element.querySelector('.markmap-svg') as SVGSVGElement;
-    if (!svg) return;
-
-    try {
-      // 克隆SVG以避免影响原始显示
-      const clonedSvg = svg.cloneNode(true) as SVGSVGElement;
-
-      // 获取SVG的实际尺寸（包含所有内容的边界框）
-      const bbox = (svg as any).getBBox();
-      // 设置宽高，添加40px边距使导出更美观
-      clonedSvg.setAttribute('width', String(bbox.width + 40));
-      clonedSvg.setAttribute('height', String(bbox.height + 40));
-      // 设置viewBox，减去20px偏移以居中内容
-      clonedSvg.setAttribute('viewBox', `${bbox.x - 20} ${bbox.y - 20} ${bbox.width + 40} ${bbox.height + 40}`);
-
-      // 内联样式到SVG中，确保导出的文件样式正确
-      const styles = this._getMarkmapStyles();
-      const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-      styleElement.textContent = styles;
-      clonedSvg.insertBefore(styleElement, clonedSvg.firstChild);
-
-      // 执行下载
-      await this._downloadSvg(clonedSvg);
-    } catch (error) {
-      logger(`导出失败: ${error.message}`, 'error', error);
-    }
-  }
-
-  /**
-   * 获取思维导图的CSS样式
-   * 这些样式会被内联到导出的SVG文件中
-   * @returns CSS样式字符串
-   */
-  private _getMarkmapStyles(): string {
-    return `
-      .markmap-node circle { cursor: pointer; }
-      .markmap-node text { fill: #000; font: 300 16px/20px sans-serif; }
-      .markmap-node > g { cursor: pointer; }
-      .markmap-link { fill: none; }
-    `;
-  }
-
-  /**
-   * 下载SVG文件到文件系统
-   *
-   * 保存策略：
-   * 1. 优先使用用户在设置中配置的导出目录
-   * 2. 如果未配置，则保存到当前文档所在目录
-   * 3. 如果都不可用，保存到/tmp目录
-   *
-   * macOS实现：使用bridge.callHandler执行shell命令写入文件
-   * 其他平台：降级到浏览器下载
-   *
-   * @param svg 要保存的SVG元素
-   */
-  private async _downloadSvg(svg: SVGSVGElement) {
-    const serializer = new XMLSerializer();
-    const svgString = serializer.serializeToString(svg);
-
-    // 确定保存目录：优先使用设置中的导出目录
-    const exportDir = this.settings.exportDirectory;
-    const currentPath = (File as any).filePath || '';
-    const defaultDir = currentPath ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '/tmp';
-    const saveDir = exportDir || defaultDir;
-    const savePath = `${saveDir}/markmap.svg`;
-
-    // 使用bridge写入文件（macOS特有）
-    if ((window as any).bridge) {
-      // 转义单引号以避免shell命令注入
-      (window as any).bridge.callHandler('controller.runCommand', {
-        args: `echo '${svgString.replace(/'/g, "'\\''")}' > '${savePath}'`,
-        cwd: saveDir
-      }, (result: any) => {
-        if (result[0]) {
-          logger(`✅ SVG已保存: ${savePath}`);
-        } else {
-          logger(`保存失败: ${result[2]}`, 'error');
-        }
-      });
-    } else {
-      // 降级到浏览器下载（非macOS平台）
-      const blob = new Blob([svgString], { type: 'image/svg+xml' });
-      await this._triggerDownload(blob, 'markmap.svg');
-      logger(`✅ SVG已下载到浏览器下载目录`);
-    }
-  }
-
-  /**
-   * 触发浏览器文件下载（降级方案）
-   *
-   * 当bridge API不可用时使用此方法
-   * 通过创建临时<a>标签并模拟点击来触发下载
-   *
-   * @param blob 要下载的文件数据
-   * @param filename 文件名
-   * @returns Promise，在下载开始后resolve
-   */
-  private async _triggerDownload(blob: Blob, filename: string): Promise<void> {
-    return new Promise((resolve) => {
-      // 创建临时URL
-      const url = URL.createObjectURL(blob);
-      // 创建隐藏的下载链接
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-
-      // 触发下载
-      a.click();
-
-      // 延迟清理，确保下载已开始
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        resolve();
-      }, 100);
-    });
-  }
-
-  /**
-   * 切换侧边栏嵌入模式
-   *
-   * 功能说明：
-   * - 嵌入模式：窗口固定在侧边栏位置，尺寸跟随侧边栏变化
-   * - 悬浮模式：窗口可自由拖动和调整大小
-   *
-   * 实现细节：
-   * 1. 切换 CSS 类名
-   * 2. 更新内部状态标志
-   * 3. 更新拖动设置（根据用户配置决定是否允许拖动）
-   * 4. 调整窗口位置和尺寸
-   * 5. 设置或移除 ResizeObserver（监听侧边栏尺寸变化）
-   */
   private _toggleEmbed() {
     if (!this.state.element) return;
 
     const sidebar = document.getElementById('typora-sidebar');
     if (!sidebar) return;
 
-    // 切换嵌入状态
     this.state.element.classList.toggle('sidebar-embedded');
     this.state.isEmbedded = this.state.element.classList.contains('sidebar-embedded');
 
-    // 更新拖动设置（根据嵌入状态和用户设置）
+    // 更新拖动设置
     this._updateInteractSettings();
 
     const embedBtn = this.state.element.querySelector('[data-action="dock-left"]') as HTMLElement;
 
     if (this.state.isEmbedded) {
-      // 进入嵌入模式
       const rect = sidebar.getBoundingClientRect();
-      // 设置窗口位置和尺寸与侧边栏一致
       this.state.element.style.top = `${rect.top}px`;
       this.state.element.style.left = `${rect.left}px`;
       this.state.element.style.width = `${rect.width}px`;
       this.state.element.style.height = `${rect.height}px`;
-      // 更新按钮图标和提示
       if (embedBtn) {
         embedBtn.innerHTML = '🔗';
         embedBtn.title = '取消嵌入';
       }
 
-      // 监听侧边栏尺寸变化，实时同步窗口尺寸
       this.state.resizeObserver = new ResizeObserver(() => {
         if (this.state.isEmbedded && this.state.element) {
           const newRect = sidebar.getBoundingClientRect();
@@ -1157,23 +805,18 @@ export class TocMindmapComponent {
       });
       this.state.resizeObserver.observe(sidebar);
     } else {
-      // 退出嵌入模式，恢复悬浮状态
-      // 恢复用户设置的默认尺寸
       this.state.element.style.width = `${this.settings.tocWindowWidth}px`;
       this.state.element.style.height = `${this.settings.tocWindowHeight}px`;
-      // 清除位置样式，使用 CSS 默认定位
       this.state.element.style.top = '';
       this.state.element.style.left = '';
-      // 更新按钮图标和提示
       if (embedBtn) {
         embedBtn.innerHTML = '📌';
         embedBtn.title = '嵌入侧边栏';
       }
-      // 停止监听侧边栏尺寸变化
       this.state.resizeObserver?.disconnect();
       this.state.resizeObserver = null;
     }
-    // 注意：不自动执行适应视图，保持用户当前的缩放状态
+    // 移除自动适应视图调用，保持用户当前的缩放状态
   }
 
   private async _fitToView(event?: MouseEvent) {
@@ -1237,11 +880,11 @@ export class TocMindmapComponent {
       logger(`高亮节点文本背景：原始颜色=${originalBg}, 高亮色=${highlightColor}, 持续时间=${duration}ms`);
 
       foDivSelection.transition('highlight')
-          .duration(duration / 2)
-          .style('background-color', highlightColor)
-          .transition()
-          .duration(duration / 2)
-          .style('background-color', originalBg);
+        .duration(duration / 2)
+        .style('background-color', highlightColor)
+        .transition()
+        .duration(duration / 2)
+        .style('background-color', originalBg);
     } else {
       logger('在节点内未找到 foreignObject>div>div 元素进行高亮。');
     }
@@ -1256,21 +899,21 @@ export class TocMindmapComponent {
     const nodeRect = targetElement.getBoundingClientRect();
 
     const originalNodeX =
-        (nodeRect.left - svgRect.left - transform.x) / transform.k +
-        nodeRect.width / (2 * transform.k);
+      (nodeRect.left - svgRect.left - transform.x) / transform.k +
+      nodeRect.width / (2 * transform.k);
     const originalNodeY =
-        (nodeRect.top - svgRect.top - transform.y) / transform.k +
-        nodeRect.height / (2 * transform.k);
+      (nodeRect.top - svgRect.top - transform.y) / transform.k +
+      nodeRect.height / (2 * transform.k);
 
     const newTransform = zoomIdentity
-        .translate(svg.clientWidth / 2, svg.clientHeight / 2)
-        .scale(scale)
-        .translate(-originalNodeX, -originalNodeY);
+      .translate(svg.clientWidth / 2, svg.clientHeight / 2)
+      .scale(scale)
+      .translate(-originalNodeX, -originalNodeY);
 
     this.state.markmap.svg
-        .transition()
-        .duration(this.DELAYS.FIT_TRANSITION)
-        .call(this.state.markmap.zoom.transform, newTransform);
+      .transition()
+      .duration(this.DELAYS.FIT_TRANSITION)
+      .call(this.state.markmap.zoom.transform, newTransform);
 
     logger(`适应视图完成，缩放比例: ${scale.toFixed(2)}`);
   }
@@ -1383,27 +1026,13 @@ export class TocMindmapComponent {
     return null;
   }
 
-  /**
-   * 渲染空状态提示
-   *
-   * 当文档中没有标题时显示提示信息
-   *
-   * @param svg SVG 元素
-   */
   private _renderEmpty(svg: SVGElement) {
     svg.innerHTML = '<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle">当前文档没有标题</text>';
   }
 
 
-  // ==================== 实时更新功能 ====================
+  // --- 实时更新相关方法 ---
 
-  /**
-   * 初始化实时更新功能
-   *
-   * 策略：
-   * 1. 首先尝试使用 Typora 的原生事件系统（性能最优）
-   * 2. 如果失败，回退到 MutationObserver（兼容性方案）
-   */
   private _initRealTimeUpdate() {
     if (!this.settings.enableRealTimeUpdate) return;
 
@@ -1415,15 +1044,10 @@ export class TocMindmapComponent {
 
   /**
    * 尝试初始化 Typora 事件系统
-   *
-   * 遍历可能的事件中心位置，寻找可用的事件监听接口
-   * 优先监听 outlineUpdated 事件，其次尝试其他文档变化事件
-   *
-   * @returns 是否成功初始化
+   * 基于参考实现中的事件监听机制
    */
   private _tryInitTyporaEventSystem(): boolean {
     try {
-      // 可能的事件中心位置
       const possibleEventHubs = [
         (window as any).eventHub,
         (window as any).File?.eventHub,
@@ -1432,9 +1056,7 @@ export class TocMindmapComponent {
       ];
 
       for (const eventHub of possibleEventHubs) {
-        // 检查事件中心是否可用
         if (eventHub && eventHub.addEventListener && eventHub.eventType) {
-          // 优先使用 outlineUpdated 事件（最精确）
           if (eventHub.eventType.outlineUpdated) {
             eventHub.addEventListener(eventHub.eventType.outlineUpdated, () => {
               if (!this.isVisible) return;
@@ -1443,7 +1065,6 @@ export class TocMindmapComponent {
             return true;
           }
 
-          // 尝试其他可能的文档变化事件
           const possibleEvents = ['contentChanged', 'documentChanged', 'tocUpdated', 'fileContentChanged'];
           for (const eventName of possibleEvents) {
             if (eventHub.eventType[eventName]) {
@@ -1464,11 +1085,7 @@ export class TocMindmapComponent {
 
   /**
    * 初始化 MutationObserver（高性能优化版本）
-   *
-   * 性能优化策略：
-   * 1. 只监听标题元素的变化，忽略其他内容
-   * 2. 使用防抖处理，避免频繁更新
-   * 3. 不监听属性变化，只关注结构和文本变化
+   * 只监听标题元素的变化，忽略其他内容的修改
    */
   private _initMutationObserver() {
     const writeElement = document.querySelector('#write');
@@ -1479,14 +1096,10 @@ export class TocMindmapComponent {
       const hasHeadingChanges = mutations.some(mutation => {
         const target = mutation.target as HTMLElement;
 
-        /**
-         * 检查节点是否与标题相关
-         * @param node 要检查的节点
-         * @returns 是否与标题相关
-         */
+        // 检查是否是标题元素或其父元素
         const isHeadingRelated = (node: Node): boolean => {
           if (node.nodeType !== Node.ELEMENT_NODE) {
-            // 如果是文本节点，检查其父元素是否是标题
+            // 如果是文本节点，检查其父元素
             return node.parentElement?.tagName.match(/^H[1-6]$/) !== null;
           }
           const element = node as HTMLElement;
@@ -1512,27 +1125,21 @@ export class TocMindmapComponent {
         return false;
       });
 
-      // 如果有标题相关的变化，触发防抖更新
       if (hasHeadingChanges) {
         this.debouncedUpdate();
       }
     });
 
-    // 配置观察器：只监听必要的变化类型
+    // 只监听必要的变化类型，不监听属性变化
     this.state.contentObserver.observe(writeElement, {
-      childList: true,      // 监听子节点的添加和删除
-      subtree: true,        // 监听所有后代节点
-      characterData: true,  // 监听文本内容变化
+      childList: true,
+      subtree: true,
+      characterData: true,
     });
 
     logger('MutationObserver 已启动（优化模式：仅监听标题变化）');
   }
 
-  /**
-   * 清理实时更新监听器
-   *
-   * 断开 MutationObserver 连接，释放资源
-   */
   private _cleanupRealTimeUpdate() {
     if (this.state.contentObserver) {
       this.state.contentObserver.disconnect();
@@ -1541,12 +1148,6 @@ export class TocMindmapComponent {
     }
   }
 
-  /**
-   * 处理内容变化
-   *
-   * 当检测到文档内容变化时调用此方法
-   * 执行思维导图的更新操作
-   */
   private async _handleContentChange() {
     if (!this.isVisible) return;
 

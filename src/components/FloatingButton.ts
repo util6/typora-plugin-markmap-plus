@@ -24,21 +24,21 @@ const COMPONENT_STYLE = `
     position: fixed;
     right: 20px;
     bottom: 20px;
-
+    
     /* 按钮尺寸（会被JS动态覆盖） */
     width: 48px;
     height: 48px;
-
+    
     /* 按钮外观 */
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 50%;
-
+    
     /* 内容居中 */
     display: flex;
     align-items: center;
     justify-content: center;
-
+    
     /* 交互样式 */
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -102,13 +102,13 @@ export class FloatingButtonComponent {
     if (this.state.element) return;
 
     logger('初始化悬浮按钮');
-
+    
     // 创建按钮DOM元素
     this._createElement();
-
+    
     // 绑定事件监听器（点击事件）
     this._attachEventListeners();
-
+    
     // 设置拖拽功能
     this._setupInteractJS();
   }
@@ -122,7 +122,7 @@ export class FloatingButtonComponent {
 
     // 清理拖拽功能
     interact(this.state.element).unset();
-
+    
     // 移除DOM元素
     this.state.element?.remove();
     this.state.element = null;
@@ -186,7 +186,7 @@ export class FloatingButtonComponent {
           // 拖拽开始事件 - 修复瞬移问题
           start: (event) => {
             const target = event.target;
-
+            
             // 如果还没有设置left/top，先获取当前实际位置
             if (!target.style.left || !target.style.top) {
               const rect = target.getBoundingClientRect();
@@ -196,11 +196,11 @@ export class FloatingButtonComponent {
               target.style.bottom = 'auto';
             }
           },
-
+          
           // 拖拽移动事件
           move: (event) => {
             const target = event.target;
-
+            
             // 计算新位置
             const left = (parseFloat(target.style.left) || 0) + event.dx;
             const top = (parseFloat(target.style.top) || 0) + event.dy;
@@ -219,7 +219,7 @@ export class FloatingButtonComponent {
    */
   private _injectStyle() {
     const styleId = 'markmap-floating-button-style';
-
+    
     // 如果样式已存在，直接返回
     if (document.getElementById(styleId)) return;
 
@@ -236,21 +236,21 @@ export class FloatingButtonComponent {
    */
   private _attachEventListeners() {
     if (!this.state.element) return;
-
+    
     // 用于区分拖拽和点击的标志
     let isDragging = false;
-
+    
     // 监听拖拽开始事件
     interact(this.state.element).on('dragmove', () => {
       isDragging = true;
     });
-
+    
     // 监听拖拽结束事件
     interact(this.state.element).on('dragend', () => {
       // 延迟重置标志，避免拖拽结束后立即触发点击
       setTimeout(() => { isDragging = false; }, 0);
     });
-
+    
     // 监听点击事件
     this.state.element.addEventListener('click', (e) => {
       // 只有在非拖拽状态下才触发点击回调
