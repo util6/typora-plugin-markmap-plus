@@ -316,10 +316,10 @@ export function getDebugInfo() {
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
-): (...args: Parameters<T>) => void {
+): ((...args: any[]) => void) {
   let timeout: number | undefined;
 
-  return function(this: ThisParameterType<T>, ...args: Parameters<T>) {
+  return function(this: ThisParameterType<T>, ...args: any[]) {
     const context = this;
     clearTimeout(timeout);
     timeout = window.setTimeout(() => {
