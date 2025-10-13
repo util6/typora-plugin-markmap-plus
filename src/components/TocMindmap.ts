@@ -114,7 +114,7 @@ const COMPONENT_STYLE = `
     border: 1px solid #e0e0e0;
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    z-index: 100;
+    z-index: 9999;
     display: flex;
     flex-direction: column;
     font-family: system-ui, -apple-system, sans-serif;
@@ -192,7 +192,7 @@ const COMPONENT_STYLE = `
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    z-index: 101;
+    z-index: 10000;
     padding: 4px 0;
     min-width: 120px;
   }
@@ -1044,8 +1044,8 @@ export class TocMindmapComponent {
     // 确定保存目录：优先使用设置中的导出目录
     const exportDir = this.settings.exportDirectory;
     const currentPath = (File as any).filePath || '';
-    const defaultDir = typeof currentPath === 'string' && currentPath.includes('/')
-      ? currentPath.substring(0, currentPath.lastIndexOf('/'))
+    const defaultDir = typeof currentPath === 'string' && currentPath.includes('/') 
+      ? currentPath.substring(0, currentPath.lastIndexOf('/')) 
       : '/tmp';
     const saveDir = exportDir || defaultDir;
     const savePath = `${saveDir}/markmap.svg`;
