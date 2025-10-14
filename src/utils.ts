@@ -73,9 +73,21 @@ const DEBUG_CONFIG = {
  * @param level 日志级别：debug | info | warn | error
  * @param data 可选的附加数据对象
  */
-export function logger(message: string, level: 'debug' | 'info' | 'warn' | 'error' = 'info', data?: any) {
+export function logger(message: string | any, level: 'debug' | 'info' | 'warn' | 'error' = 'info', data?: any) {
   // 如果调试功能被禁用，直接返回
   if (!DEBUG_CONFIG.enabled) return
+
+  // 如果第一个参数是对象，直接打印对象
+  if (typeof message === 'object' && message !== null) {
+    const consoleFn = console[level] || console.log
+    try {
+      const objStr = JSON.stringify(message, null, 2)
+      consoleFn(`[MARKMAP-${level.toUpperCase()}] 对象详情:\n${objStr}`)
+    } catch (e) {
+      consoleFn(`[MARKMAP-${level.toUpperCase()}] 对象详情:`, message)
+    }
+    return
+  }
 
   // 构建时间戳（如果启用）
   const timestamp = DEBUG_CONFIG.showTimestamp ? new Date().toLocaleTimeString() : ''
@@ -83,8 +95,15 @@ export function logger(message: string, level: 'debug' | 'info' | 'warn' | 'erro
 
   // 始终输出到 console（即使在 macOS 下可能看不到）
   const consoleFn = console[level] || console.log
-  if (data) {
-    consoleFn(fullMessage, data)
+  if (data !== undefined) {
+    try {
+      // 使用 JSON.stringify 深度打印对象，类似 console.log
+      const dataStr = JSON.stringify(data, null, 2)
+      consoleFn(fullMessage + '\n' + dataStr)
+    } catch (e) {
+      // 如果序列化失败（如循环引用），回退到直接输出
+      consoleFn(fullMessage, data)
+    }
   } else {
     consoleFn(fullMessage)
   }
