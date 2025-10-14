@@ -110,6 +110,8 @@ export function logger(message: string | any, level: 'debug' | 'info' | 'warn' |
 
   // 在 macOS 下额外显示页面消息（仅对重要级别）
   if (DEBUG_CONFIG.showInPage && (level === 'info' || level === 'warn' || level === 'error')) {
+    ensureCopyButton()
+    ensureClearButton()
     showPageMessage(message, level)
   }
 }
@@ -127,7 +129,7 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
   
   // 计算垂直位置（避免重叠）
   const existingMessages = document.querySelectorAll('[data-debug-message]')
-  const topOffset = 10 + (existingMessages.length * 40)
+  const topOffset = 50 + (existingMessages.length * 40)
 
   // 设置消息样式
   messageDiv.style.cssText = `
@@ -175,8 +177,93 @@ function showPageMessage(message: string, type: 'info' | 'warn' | 'error' = 'inf
   setTimeout(() => {
     if (messageDiv.parentNode) {
       messageDiv.remove()
+      repositionMessages()
     }
   }, timeout)
+}
+
+/**
+ * 重新计算所有消息的位置
+ */
+function repositionMessages() {
+  const messages = document.querySelectorAll('[data-debug-message]')
+  messages.forEach((msg, index) => {
+    (msg as HTMLElement).style.top = `${50 + index * 40}px`
+  })
+}
+
+/**
+ * 确保复制按钮存在
+ * 创建一个置顶的不会消失的消息作为复制按钮
+ */
+function ensureCopyButton() {
+  if (document.querySelector('[data-copy-logs-button]')) return
+
+  const copyMsg = document.createElement('div')
+  copyMsg.setAttribute('data-copy-logs-button', 'true')
+  copyMsg.textContent = '📋 复制所有日志'
+  copyMsg.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #607D8B;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    z-index: 10001;
+    font-size: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    cursor: pointer;
+  `
+
+  copyMsg.addEventListener('click', () => {
+    const messages = Array.from(document.querySelectorAll('[data-debug-message]'))
+      .map(el => el.textContent)
+      .join('\n')
+    navigator.clipboard.writeText(messages).then(() => {
+      copyMsg.style.background = DEBUG_CONFIG.copySuccessColor
+      copyMsg.textContent = '✓ 已复制'
+      setTimeout(() => {
+        copyMsg.style.background = '#607D8B'
+        copyMsg.textContent = '📋 复制所有日志'
+      }, 1000)
+    })
+  })
+
+  document.body.appendChild(copyMsg)
+}
+
+/**
+ * 确保清除按钮存在
+ * 创建一个置顶的不会消失的消息作为清除按钮
+ */
+function ensureClearButton() {
+  if (document.querySelector('[data-clear-logs-button]')) return
+
+  const clearMsg = document.createElement('div')
+  clearMsg.setAttribute('data-clear-logs-button', 'true')
+  clearMsg.textContent = '🗑️ 清除所有日志'
+  clearMsg.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 150px;
+    background: #607D8B;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    z-index: 10001;
+    font-size: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    cursor: pointer;
+  `
+
+  clearMsg.addEventListener('click', () => {
+    document.querySelectorAll('[data-debug-message]').forEach(el => el.remove())
+  })
+
+  document.body.appendChild(clearMsg)
 }
 
 // ==================== 性能监控工具 ====================
