@@ -105,6 +105,7 @@ export class MarkmapSettingTab extends SettingTab {
     // 默认展开层级设置
     this.addSetting(item => {
       item.addName('默认展开层级')
+      item.addDescription('1-5 仅显示标题，6 包含正文内容')
       item.addInput('number', (input) => {
         const config = SETTING_CONSTRAINTS.initialExpandLevel
         input.value = this.settings.get('initialExpandLevel').toString()
