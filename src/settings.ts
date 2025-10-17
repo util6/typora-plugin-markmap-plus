@@ -33,7 +33,8 @@ export const SETTING_CONSTRAINTS = {
   floatingButtonSize: { min: 30, max: 100, default: DEFAULT_FLOATING_BUTTON_OPTIONS.floatingButtonSize },
   animationDuration: { min: 0, max: 1000, default: DEFAULT_TOC_OPTIONS.animationDuration },
   scrollOffsetTop: { min: 0, max: 500, default: DEFAULT_TOC_OPTIONS.scrollOffsetTop },
-  highlightColor: { default: DEFAULT_TOC_OPTIONS.highlightColor },
+  headingHighlightColor: { default: DEFAULT_TOC_OPTIONS.headingHighlightColor },
+  nodeHighlightColor: { default: DEFAULT_TOC_OPTIONS.nodeHighlightColor },
   highlightDuration: { min: 500, max: 5000, default: DEFAULT_TOC_OPTIONS.highlightDuration },
 }
 
@@ -248,15 +249,25 @@ export class MarkmapSettingTab extends SettingTab {
       })
     })
 
-    // 高亮颜色设置
+    // 文档标题高亮颜色设置
     this.addSetting(item => {
-      item.addName('高亮颜色')
-      item.addDescription("点击思维导图节点后，内容窗口中对应标题的背景高亮颜色。支持所有CSS颜色格式 (例如 'gold', '#FFD700', 'rgb(255, 215, 0)')。")
+      item.addName('文档标题高亮颜色')
+      item.addDescription("点击思维导图节点后，内容窗口中对应标题的背景高亮颜色。支持所有CSS颜色格式，包括渐变 (例如 'gold', '#FFD700', 'linear-gradient(90deg, red, blue)')。")
       item.addInput('text', (input) => {
-        const config = SETTING_CONSTRAINTS.highlightColor
-        input.value = this.settings.get('highlightColor')
-        // 当用户修改值时，保存到设置中
-        input.onchange = () => this.settings.set('highlightColor', input.value || config.default)
+        const config = SETTING_CONSTRAINTS.headingHighlightColor
+        input.value = this.settings.get('headingHighlightColor')
+        input.onchange = () => this.settings.set('headingHighlightColor', input.value || config.default)
+      })
+    })
+
+    // 思维导图节点高亮颜色设置
+    this.addSetting(item => {
+      item.addName('思维导图节点高亮颜色')
+      item.addDescription("适应视图时，思维导图节点的背景高亮颜色。仅支持纯色格式 (例如 'gold', '#FFD700', 'rgba(255, 215, 0, 0.5)')。")
+      item.addInput('text', (input) => {
+        const config = SETTING_CONSTRAINTS.nodeHighlightColor
+        input.value = this.settings.get('nodeHighlightColor')
+        input.onchange = () => this.settings.set('nodeHighlightColor', input.value || config.default)
       })
     })
 

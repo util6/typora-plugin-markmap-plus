@@ -60,8 +60,10 @@ export interface TocMindmapOptions {
   allowDragWhenEmbedded: boolean
   /** 点击跳转时距离视窗顶部的像素距离 */
   scrollOffsetTop: number
-  /** 点击跳转后标题的背景高亮颜色 */
-  highlightColor: string
+  /** 点击跳转后文档标题的背景高亮颜色 */
+  headingHighlightColor: string
+  /** 思维导图节点的背景高亮颜色 */
+  nodeHighlightColor: string
   /** 高亮效果的持续时间（毫秒） */
   highlightDuration: number
   /** 导出文件的保存目录 */
@@ -110,7 +112,8 @@ export const DEFAULT_TOC_OPTIONS: TocMindmapOptions = {
   animationDuration: 500,
   allowDragWhenEmbedded: false,
   scrollOffsetTop: 80,
-  highlightColor: 'rgba(255, 215, 0, 0.5)',
+  headingHighlightColor: 'rgba(255, 215, 0, 0.5)',
+  nodeHighlightColor: 'rgba(142, 110, 255, 0.7)',
   highlightDuration: 1500,
   exportDirectory: '',
 
@@ -627,13 +630,13 @@ export class TocMindmapComponent {
       document.head.appendChild(styleTag);
     }
 
-    const color = this.options.highlightColor;
+    const color = this.options.headingHighlightColor;
     const duration = this.options.highlightDuration / 1000; // 转换为秒
     // 动态生成 keyframes，将用户自定义颜色和持续时间注入
     styleTag.textContent = `
       @keyframes markmap-highlight-animation {
-        from { background-color: ${color}; }
-        to { background-color: transparent; }
+        from { background: ${color}; }
+        to { background: transparent; }
       }
 
       .markmap-highlight {
@@ -1349,7 +1352,7 @@ export class TocMindmapComponent {
     // 高亮目标节点的文本背景
     if (!foDivSelection.empty()) {
       const originalBg = foDivSelection.style('background-color');
-      const highlightColor = this.options.highlightColor;
+      const highlightColor = this.options.nodeHighlightColor;
       const duration = this.options.highlightDuration;
       logger(`高亮节点文本背景：原始颜色=${originalBg}, 高亮色=${highlightColor}, 持续时间=${duration}ms`);
 
