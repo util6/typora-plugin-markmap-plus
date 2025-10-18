@@ -69,7 +69,7 @@ export class MarkmapSettingTab extends SettingTab {
    * 在 Typora 设置界面的侧边栏中显示
    */
   get name(): string {
-    return 'Markmap'
+    return 'Markmap-Plus'
   }
 
   /**

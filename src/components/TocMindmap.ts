@@ -815,6 +815,13 @@ export class TocMindmapComponent {
 
     const { root } = this.transformer.transform(markdownContent); // 转换 Markdown 为思维导图数据
 
+    // 检测是否有虚拟根节点（多个一级标题时 Markmap 会创建虚拟根）
+    const hasVirtualRoot = !root.content && root.children && root.children.length > 1;
+    // 如果有虚拟根节点，展开层级需要 +1 来补偿
+    const adjustedExpandLevel = hasVirtualRoot 
+      ? this.options.initialExpandLevel + 1 
+      : this.options.initialExpandLevel;
+
     // 根据配置选项生成 Markmap 选项
     const options = deriveOptions({
       spacingHorizontal: this.options.spacingHorizontal,      // 水平间距
@@ -823,7 +830,7 @@ export class TocMindmapComponent {
       paddingX: this.options.paddingX,                        // 水平内边距
       color: this.options.nodeColors,                         // 节点颜色方案
       colorFreezeLevel: this.options.colorFreezeLevel,        // 颜色冻结层级
-      initialExpandLevel: this.options.initialExpandLevel > 5 ? 6 : this.options.initialExpandLevel, // 初始展开层级
+      initialExpandLevel: adjustedExpandLevel > 5 ? 6 : adjustedExpandLevel, // 初始展开层级
       duration: this.options.animationDuration,               // 动画持续时间
     });
 
