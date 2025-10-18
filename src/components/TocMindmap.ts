@@ -818,8 +818,8 @@ export class TocMindmapComponent {
     // 检测是否有虚拟根节点（多个一级标题时 Markmap 会创建虚拟根）
     const hasVirtualRoot = !root.content && root.children && root.children.length > 1;
     // 如果有虚拟根节点，展开层级需要 +1 来补偿
-    const adjustedExpandLevel = hasVirtualRoot 
-      ? this.options.initialExpandLevel + 1 
+    const adjustedExpandLevel = hasVirtualRoot
+      ? this.options.initialExpandLevel + 1
       : this.options.initialExpandLevel;
 
     // 根据配置选项生成 Markmap 选项
@@ -880,8 +880,7 @@ export class TocMindmapComponent {
       // 如果当前节点没有在映射中，则移动到其父节点
       currentNode = currentNode.parent;
     }
-
-    logger(`当前节点: ${currentNode.content}`);                // 记录当前节点内容
+     // 记录当前节点内容
 
     // 如果找到了对应的标题节点
     if (currentNode && currentNode.state?.path) {
@@ -1187,6 +1186,34 @@ export class TocMindmapComponent {
    *
    * @param format 导出格式 (目前只支持svg)
    */
+
+  /**
+   * 显示简易提示
+   */
+  private _showToast(message: string, type: 'success' | 'error' = 'success') {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      background: ${type === 'success' ? '#4caf50' : '#f44336'};
+      color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 999999;
+      font-size: 14px;
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.3s';
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }
+
   private async _exportMarkmap(format: 'svg' | 'png') {
     // 如果组件元素不存在，则直接返回
     if (!this.state.element) return;
@@ -1255,13 +1282,24 @@ export class TocMindmapComponent {
 
     // 确定保存目录：优先使用设置中的导出目录
     const exportDir = this.options.exportDirectory;           // 获取导出目录
-    const currentPath = (File as any).filePath || '';         // 获取当前文件路径
-    // 如果当前路径包含斜杠，则提取目录部分，否则使用 /tmp
-    const defaultDir = typeof currentPath === 'string' && currentPath.includes('/')
-      ? currentPath.substring(0, currentPath.lastIndexOf('/'))
-      : '/tmp';
-    const saveDir = exportDir || defaultDir;                  // 确定保存目录
-    const savePath = `${saveDir}/markmap.svg`;                // 构造保存路径
+    const currentPath = (window as any)._options?.filePath || (File as any).filePath || '';
+
+    const saveDir = exportDir||"~/Download" ;                  // 确定保存目录
+
+    // 从当前文件路径提取文件名（不含扩展名）
+    let fileName = 'markmap';
+    if (typeof currentPath === 'string' && currentPath.includes('/')) {
+      const baseName = currentPath.substring(currentPath.lastIndexOf('/') + 1);
+      fileName = baseName.replace(/\.[^.]+$/, ''); // 移除扩展名
+    } else {
+      // 降级方案：使用第一个一级标题作为文件名
+      const firstH1 = document.querySelector('h1');
+      if (firstH1) {
+        fileName = firstH1.textContent?.trim().replace(/[/\\?%*:|"<>]/g, '-') || 'markmap';
+      }
+    }
+
+    const savePath = `${saveDir}/${fileName}.svg`;            // 构造保存路径
 
     // 使用bridge写入文件（macOS特有）
     if ((window as any).bridge) {
@@ -1271,16 +1309,19 @@ export class TocMindmapComponent {
         cwd: saveDir                                                  // 设置工作目录
       }, (result: any) => {
         if (result[0]) {
-          logger(`✅ SVG已保存: ${savePath}`);                        // 记录保存成功日志
+          logger(`✅ SVG已保存: ${savePath}`);
+          this._showToast(`SVG 已保存至: ${savePath}`, 'success');
         } else {
-          logger(`保存失败: ${result[2]}`, 'error');                 // 记录保存失败日志
+          logger(`保存失败: ${result[2]}`, 'error');
+          this._showToast('保存失败', 'error');
         }
       });
     } else {
       // 降级到浏览器下载（非macOS平台）
       const blob = new Blob([svgString], { type: 'image/svg+xml' }); // 创建 Blob 对象
-      await this._triggerDownload(blob, 'markmap.svg');             // 触发下载
-      logger(`✅ SVG已下载到浏览器下载目录`);                         // 记录下载成功日志
+      await this._triggerDownload(blob, `${fileName}.svg`);         // 触发下载
+      logger(`✅ SVG已下载到浏览器下载目录`);
+      this._showToast(`SVG 已下载: ${fileName}.svg`, 'success');
     }
   }
 
