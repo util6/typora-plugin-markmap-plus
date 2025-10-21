@@ -12,7 +12,7 @@
  */
 
 // ==================== 依赖导入 ====================
- // 导入 YAML 解析库，用于处理配置文件
+// 导入 YAML 解析库，用于处理配置文件
 import * as yaml from 'js-yaml'
 // 导入 markmap-lib 库的核心组件，用于将 Markdown 转换为思维导图数据结构
 import { Transformer, type ITransformPlugin, builtInPlugins } from 'markmap-lib';
@@ -880,20 +880,29 @@ export class TocMindmapComponent {
       // 如果当前节点没有在映射中，则移动到其父节点
       currentNode = currentNode.parent;
     }
-     // 记录当前节点内容
+    // 记录当前节点内容
 
     // 如果找到了对应的标题节点
     if (currentNode && currentNode.state?.path) {
       const path = currentNode.state.path;                    // 获取节点路径
-      const element = this.state.headingElements.get(path);   // 根据路径获取标题元素
+      let element = this.state.headingElements.get(path);     // 根据路径获取标题元素
+
+      // 降级方案：通过节点内容匹配文档标题
+      if (!element) {
+        const node = this._findNodeByStatePath(path);
+        if (node?.content) {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = node.content;
+          const nodeText = tempDiv.textContent?.trim();
+          const headings = this._getDocumentHeadings();
+          element = headings.find(h => h.textContent?.trim() === nodeText);
+        }
+      }
 
       if (element) {
-        // 记录跳转日志
-        logger(`跳转到标题: ${path} (原始节点: ${(nodeEl as any).__data__?.state?.path})`);
-        logger(`跳转到元素: ${element.outerHTML}`);
-        this._scrollToElement(element);                       // 滚动到标题元素
+        logger(`跳转到标题: ${path}`);
+        this._scrollToElement(element);
       } else {
-        // 这种情况理论上不应该发生，因为 a.has(path) 已经检查过
         logger(`未找到路径对应的元素: ${path}`, 'warn');
       }
     } else {
@@ -1012,7 +1021,7 @@ export class TocMindmapComponent {
         this.state.headingElements.set(path, currentHeadingElement);
         // 建立从元素到路径的映射
         this.state.elementToPath.set(currentHeadingElement, path);
-        logger(`✓ 匹配成功: ${path}`);
+
         // 移动到下一个标题元素
         headingDomIndex++;
         i++;
@@ -1067,7 +1076,7 @@ export class TocMindmapComponent {
    * @param recursive 是否递归搜索子节点，默认为 true
    * @returns 匹配的数据节点，如果未找到则返回 null
    */
-  public findNodeByContent(content: string, recursive: boolean = true): any | null {
+  public _findNodeByContent(content: string, recursive: boolean = true): any | null {
     // 检查 Markmap 数据是否已初始化
     if (!this.state.markmap?.state?.data) {
       logger('Markmap 数据未初始化', 'warn');
@@ -1455,14 +1464,15 @@ export class TocMindmapComponent {
       logger('进入 _fitToView，开始适应视图。')
       logger(`当前标题内容:${currentElement?.textContent}`)
 
-      // 如果当前元素不存在，则执行默认适应视图
-      if (!currentElement) {
-        this.state.markmap.fit();
-        return;
+      // 获取当前元素对应的路径
+      let path = this.state.elementToPath.get(<HTMLElement>currentElement);
+
+      // 降级方案：通过内容查找节点
+      if (!path && currentElement?.textContent) {
+        const node = this._findNodeByContent(currentElement.textContent.trim());
+        path = node?.state?.path;
       }
 
-      // 获取当前元素对应的路径
-      const path = this.state.elementToPath.get(currentElement);
       logger(`当前path:${path}`)
       // 如果路径不存在，则执行默认适应视图
       if (!path) {
