@@ -1122,21 +1122,34 @@ export class TocMindmapComponent {
     const viewportTop = window.scrollY;                       // 视口顶部位置
     const viewportBottom = viewportTop + window.innerHeight;  // 视口底部位置
 
-    // 初始化最接近的标题元素和最小距离
-    let closestHeading: HTMLElement | null = null;
-    let minDistance = Infinity;
+    // 查找视窗内层级最小（最深）的标题
+    let deepestHeading: HTMLElement | null = null;
+    let maxLevel = 0;
 
-    // 遍历所有标题元素，查找在视口内或最接近视口顶部的标题
+    // 遍历所有标题元素，查找视窗内层级最深的标题
     for (const heading of headings) {
       const rect = heading.getBoundingClientRect();            // 获取标题元素的边界矩形
       const elementTop = rect.top + window.scrollY;           // 计算元素顶部位置
 
-      // 如果标题元素在视口内（考虑偏移量），直接返回该元素
+      // 如果标题元素在视口内（考虑偏移量）
       if (elementTop >= viewportTop - this.options.viewportOffset && elementTop <= viewportBottom) {
-        return heading;
+        const level = parseInt(heading.tagName.substring(1)); // 获取标题层级 (h1->1, h5->5)
+        if (level > maxLevel) {
+          maxLevel = level;
+          deepestHeading = heading;
+        }
       }
+    }
 
-      // 计算标题元素与视口顶部的距离，更新最接近的标题
+    // 如果视窗内有标题，返回最深层级的标题
+    if (deepestHeading) return deepestHeading;
+
+    // 否则返回最接近视口顶部的标题
+    let closestHeading: HTMLElement | null = null;
+    let minDistance = Infinity;
+    for (const heading of headings) {
+      const rect = heading.getBoundingClientRect();
+      const elementTop = rect.top + window.scrollY;
       const distance = Math.abs(elementTop - viewportTop);
       if (distance < minDistance) {
         minDistance = distance;
