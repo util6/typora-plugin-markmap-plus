@@ -64,8 +64,6 @@ export interface TocMindmapOptions {
   autoFitWhenUpdate: boolean
   /** 动画持续时间（毫秒），0 表示禁用动画 */
   animationDuration: number
-  /** 固定到侧边栏时是否允许拖动 */
-  allowDragWhenEmbedded: boolean
   /** 点击跳转时距离视窗顶部的像素距离 */
   scrollOffsetTop: number
   /** 点击跳转后文档标题的背景高亮颜色 */
@@ -76,6 +74,8 @@ export interface TocMindmapOptions {
   highlightDuration: number
   /** 导出文件的保存目录 */
   exportDirectory: string
+  /** 固定到右侧时，导图窗口占内容区域宽度的百分比 */
+  widthPercentWhenPinRight: number
 
   // 高级配置
   /** Markmap 水平间距 */
@@ -118,12 +118,12 @@ export const DEFAULT_TOC_OPTIONS: TocMindmapOptions = {
   keepFoldStateWhenUpdate: true,// 默认在更新时保持节点折叠状态
   autoFitWhenUpdate: false,     // 默认在更新时不自动适应视图
   animationDuration: 500,       // 默认动画持续时间为 500 毫秒
-  allowDragWhenEmbedded: false, // 默认嵌入侧边栏时不允许拖动
   scrollOffsetTop: 80,          // 默认滚动偏移为 80 像素
   headingHighlightColor: 'rgba(255, 215, 0, 0.5)', // 默认标题高亮颜色为金色半透明
   nodeHighlightColor: 'rgba(142, 110, 255, 0.7)',  // 默认节点高亮颜色为紫色半透明
   highlightDuration: 1500,      // 默认高亮持续时间为 1500 毫秒
   exportDirectory: '',          // 默认导出目录为空
+  widthPercentWhenPinRight: 30, // 默认固定到右侧时占 30% 宽度
 
   // 高级配置默认值
   spacingHorizontal: 80,        // 默认水平间距为 80 像素
@@ -171,19 +171,6 @@ const COMPONENT_STYLE = `
     user-select: none;                  /* 禁止用户选择文本 */
   }
 
-  /* TOC 弹窗嵌入侧边栏时的样式 */
-  .markmap-toc-modal.sidebar-embedded {
-    top: 0;                             /* 顶部对齐 */
-    left: 0;                            /* 左侧对齐 */
-    right: auto;                        /* 右侧自动 */
-    width: 100%;                        /* 宽度 100% */
-    height: 100%;                       /* 高度 100% */
-    border-radius: 0;                   /* 无圆角 */
-    border: none;                       /* 无边框 */
-    box-shadow: none;                   /* 无阴影 */
-    resize: horizontal;                 /* 可水平调整大小 */
-  }
-
   /* TOC 弹窗头部样式 */
   .markmap-toc-header {
     padding: 10px;                      /* 内边距 10px */
@@ -195,10 +182,6 @@ const COMPONENT_STYLE = `
     cursor: move;                       /* 鼠标样式为移动 */
   }
 
-  /* 嵌入状态下的标题栏样式 */
-  .markmap-toc-modal.sidebar-embedded .markmap-toc-header {
-    cursor: default;                    /* 默认鼠标样式 */
-  }
   .markmap-toc-title {
     font-weight: bold;                  /* 粗体 */
     color: #333;                        /* 文字颜色 */
@@ -251,6 +234,20 @@ const COMPONENT_STYLE = `
   .markmap-export-item:hover {
     background-color: #f5f5f5;          /* 悬停时的背景色 */
   }
+
+  /* 固定到右侧状态样式 */
+  .markmap-toc-modal.pinned-right {
+    box-shadow: none;                   /* 无阴影 */
+    border-radius: 0;                   /* 无圆角 */
+    border-right: none;                 /* 无右边框 */
+  }
+
+  /* 固定到左侧状态样式 */
+  .markmap-toc-modal.pinned-left {
+    box-shadow: none;                   /* 无阴影 */
+    border-radius: 0;                   /* 无圆角 */
+    border-left: none;                  /* 无左边框 */
+  }
 `;
 
 // =======================================================
@@ -261,7 +258,8 @@ const COMPONENT_TEMPLATE = `
   <div class="markmap-toc-header">
     <span class="markmap-toc-title"></span>
     <div class="markmap-toc-buttons">
-      <button class="markmap-toc-btn" data-action="dock-left" title="嵌入侧边栏">📌</button>
+      <button class="markmap-toc-btn" data-action="pin-left" title="固定到左侧">️◀️</button>
+      <button class="markmap-toc-btn" data-action="pin-right" title="固定到右侧">▶️</button>
       <button class="markmap-toc-btn" data-action="zoom-in" title="放大">🔍+</button>
       <button class="markmap-toc-btn" data-action="zoom-out" title="缩小">🔍-</button>
       <button class="markmap-toc-btn" data-action="fit" title="适应视图">🎯</button>
@@ -390,10 +388,6 @@ export class TocMindmapComponent {
     element: null as HTMLElement | null,
     /** Markmap 实例，用于渲染和控制思维导图 */
     markmap: null as any | null,
-    /** 是否处于侧边栏嵌入模式 */
-    isEmbedded: false,
-    /** 监听侧边栏尺寸变化的观察器 */
-    resizeObserver: null as ResizeObserver | null,
     /** 监听文档内容变化的观察器 */
     contentObserver: null as MutationObserver | null,
     /** 上次标题内容的哈希值，用于检测变化 */
@@ -402,6 +396,14 @@ export class TocMindmapComponent {
     headingElements: new Map<string, HTMLElement>(),
     /** 双向索引：从 HTMLElement 到 state.path */
     elementToPath: new Map<HTMLElement, string>(),
+    /** 是否固定到右侧 */
+    isPinRight: false,
+    /** 是否固定到左侧 */
+    isPinLeft: false,
+    /** 导图窗口原始位置尺寸 */
+    originModalRect: null as DOMRect | null,
+    /** 内容区域原始位置尺寸 */
+    originContentRect: null as DOMRect | null,
   };
 
   /** Markmap 转换器实例，用于将 Markdown 转换为思维导图数据 */
@@ -445,6 +447,7 @@ export class TocMindmapComponent {
       this._createElement();              // 创建组件的 DOM 元素
       this._attachEventListeners();       // 绑定事件监听器
       this._initRealTimeUpdate();         // 初始化实时更新功能
+      window.addEventListener('resize', this._handleResize); // 监听窗口大小变化
       await this._update();               // 更新思维导图内容
       logger('TOC 窗口显示成功');         // 记录成功日志
     } catch (error) {
@@ -469,6 +472,13 @@ export class TocMindmapComponent {
     // 如果组件不可见，则直接返回
     if (!this.isVisible) return;
 
+    // 无条件恢复 #write 的样式（防止状态丢失导致无法恢复）
+    const content = document.querySelector('#write') as HTMLElement;
+    if (content) {
+      content.style.marginRight = '';
+      content.style.marginLeft = '';
+    }
+
     // 清理 InteractJS 实例
     if (this.state.element) {
       interact(this.state.element).unset(); // 取消 InteractJS 设置
@@ -480,16 +490,19 @@ export class TocMindmapComponent {
     // 清理所有事件监听和观察器
     this._cleanupEventListeners();        // 清理事件监听器
     this._cleanupRealTimeUpdate();        // 清理实时更新功能
-    this.state.resizeObserver?.disconnect(); // 断开 ResizeObserver
+    window.removeEventListener('resize', this._handleResize); // 移除窗口大小变化监听
 
     // 重置状态
     this.state.element = null;            // 重置元素引用
     this.state.markmap = null;            // 重置 Markmap 实例
-    this.state.resizeObserver = null;     // 重置 ResizeObserver
     this.state.contentObserver = null;    // 重置 MutationObserver
     this.state.lastHeadingsHash = '';     // 重置标题哈希值
     this.state.headingElements.clear();   // 清空路径到元素的映射
     this.state.elementToPath.clear();     // 清空元素到路径的映射
+    this.state.isPinRight = false;        // 重置固定状态
+    this.state.isPinLeft = false;         // 重置固定状态
+    this.state.originModalRect = null;    // 重置原始尺寸
+    this.state.originContentRect = null;  // 重置原始尺寸
 
     logger('TOC 窗口已关闭');             // 记录日志
   }
@@ -595,34 +608,27 @@ export class TocMindmapComponent {
     // 获取标题栏元素
     const header = this.state.element.querySelector('.markmap-toc-header') as HTMLElement;
 
-    // 判断是否处于嵌入状态且不允许拖动
-    if (this.state.isEmbedded && !this.options.allowDragWhenEmbedded) {
-      // 嵌入状态且设置为不允许拖动：禁用拖动
-      interactInstance.draggable(false);                    // 禁用拖动功能
-      if (header) header.style.cursor = 'default';          // 设置光标为默认样式
-    } else {
-      // 悬浮状态或设置为允许拖动：启用拖动
-      interactInstance.draggable({
-        // 只允许从标题栏拖动
-        allowFrom: '.markmap-toc-header',
-        // 忽略 SVG 和内容区域的拖动
-        ignoreFrom: '.markmap-svg, .markmap-content',
-        listeners: {
-          move: (event) => {
-            const target = event.target;                                  // 获取目标元素
-            // 累加拖动距离
-            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;  // 计算 x 坐标偏移
-            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;  // 计算 y 坐标偏移
+    // 启用拖动
+    interactInstance.draggable({
+      // 只允许从标题栏拖动
+      allowFrom: '.markmap-toc-header',
+      // 忽略 SVG 和内容区域的拖动
+      ignoreFrom: '.markmap-svg, .markmap-content',
+      listeners: {
+        move: (event) => {
+          const target = event.target;                                  // 获取目标元素
+          // 累加拖动距离
+          const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;  // 计算 x 坐标偏移
+          const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;  // 计算 y 坐标偏移
 
-            // 使用 transform 实现拖动，性能更好
-            target.style.transform = `translate(${x}px, ${y}px)`;        // 应用变换
-            target.setAttribute('data-x', x.toString());                 // 设置 data-x 属性
-            target.setAttribute('data-y', y.toString());                 // 设置 data-y 属性
-          }
+          // 使用 transform 实现拖动，性能更好
+          target.style.transform = `translate(${x}px, ${y}px)`;        // 应用变换
+          target.setAttribute('data-x', x.toString());                 // 设置 data-x 属性
+          target.setAttribute('data-y', y.toString());                 // 设置 data-y 属性
         }
-      });
-      if (header) header.style.cursor = 'move';                         // 设置光标为移动样式
-    }
+      }
+    });
+    if (header) header.style.cursor = 'move';                         // 设置光标为移动样式
   }
 
   /**
@@ -730,10 +736,11 @@ export class TocMindmapComponent {
         // 根据按钮的 action 属性执行相应的功能
         switch (action) {
           case 'close': this.hide(); break;                   // 关闭思维导图窗口
-          case 'dock-left': this._toggleEmbed(); break;       // 切换侧边栏嵌入状态
+          case 'pin-left': this._pin('left'); break;          // 固定到左侧
+          case 'pin-right': this._pin('right'); break;        // 固定到右侧
           case 'zoom-in': this._zoomIn(); break;              // 放大思维导图
           case 'zoom-out': this._zoomOut(); break;            // 缩小思维导图
-          case 'fit': this._fitToView(e as MouseEvent); break; // 适应视图大小
+          case 'fit': await this._fitToView(e as MouseEvent); break; // 适应视图大小
           case 'export': this._exportMarkmap('svg'); break;   // 显示导出菜单
         }
       } catch (error) {
@@ -1394,70 +1401,170 @@ export class TocMindmapComponent {
    * 4. 调整窗口位置和尺寸
    * 5. 设置或移除 ResizeObserver（监听侧边栏尺寸变化）
    */
-  private _toggleEmbed() {
-    // 如果组件元素不存在，则直接返回
+  /**
+   * 固定到左侧 / 取消固定
+   */
+  /**
+   * 固定到左侧或右侧 / 取消固定
+   * @param side 'left' 或 'right'
+   */
+  private _pin(side: 'left' | 'right') {
+    const content = document.querySelector('#write') as HTMLElement;
+    if (!content || !this.state.element) return;
+
+    const isLeft = side === 'left';
+    const stateKey = isLeft ? 'isPinLeft' : 'isPinRight';
+    const otherStateKey = isLeft ? 'isPinRight' : 'isPinLeft';
+    const marginKey = isLeft ? 'marginLeft' : 'marginRight';
+    const otherMarginKey = isLeft ? 'marginRight' : 'marginLeft';
+    const cssClass = isLeft ? 'pinned-left' : 'pinned-right';
+    const otherCssClass = isLeft ? 'pinned-right' : 'pinned-left';
+    const resizeEdge = isLeft ? 'right' : 'left';
+
+    // 如果另一侧已固定，先清理
+    if (this.state[otherStateKey]) {
+      this.state[otherStateKey] = false;
+      content.style[otherMarginKey] = '';
+      this.state.element.classList.remove(otherCssClass);
+      
+      // 更新另一侧按钮状态
+      const otherBtn = this.state.element.querySelector(`[data-action="pin-${isLeft ? 'right' : 'left'}"]`) as HTMLElement;
+      if (otherBtn) {
+        otherBtn.innerHTML = isLeft ? '▶️' : '◀️';
+        otherBtn.title = isLeft ? '固定到右侧' : '固定到左侧';
+      }
+    }
+
+    this.state[stateKey] = !this.state[stateKey];
+
+    // 获取按钮元素
+    const btn = this.state.element.querySelector(`[data-action="pin-${side}"]`) as HTMLElement;
+
+    if (this.state[stateKey]) {
+      // 更新按钮状态
+      if (btn) {
+        btn.innerHTML = isLeft ? '⏸️' : '⏸️';
+        btn.title = isLeft ? '取消固定左侧' : '取消固定右侧';
+      }
+
+      // 只在首次固定时记录原始尺寸
+      if (!this.state.originModalRect) {
+        this.state.originModalRect = this.state.element.getBoundingClientRect();
+        this.state.originContentRect = content.getBoundingClientRect();
+      }
+
+      const { top, width, left, right } = content.getBoundingClientRect();
+      const newWidth = width * this.options.widthPercentWhenPinRight / 100;
+
+      const viewportHeight = window.innerHeight;
+      const modalHeight = viewportHeight - top;
+
+      // 设置导图位置
+      Object.assign(this.state.element.style, {
+        top: `${top}px`,
+        left: isLeft ? `${left}px` : `${right - newWidth}px`,
+        width: `${newWidth}px`,
+        height: `${modalHeight}px`,
+        transform: 'none'
+      });
+
+      // 调整内容区域
+      content.style[marginKey] = `${newWidth}px`;
+      this.state.element.classList.add(cssClass);
+
+      // 重新配置 InteractJS
+      interact(this.state.element)
+        .draggable(false)
+        .resizable({
+          edges: { left: !isLeft, right: isLeft, top: false, bottom: false },
+          listeners: {
+            move: (event) => {
+              const target = event.target;
+              const newWidth = event.rect.width;
+
+              // 同步调整 #write 的 margin
+              content.style[marginKey] = `${newWidth}px`;
+
+              // 更新导图位置
+              target.style.width = `${newWidth}px`;
+              if (!isLeft) target.style.left = `${event.rect.left}px`;
+              target.style.transform = 'none';
+            }
+          }
+        });
+    } else {
+      // 更新按钮状态
+      if (btn) {
+        btn.innerHTML = isLeft ? '◀️' : '▶️';
+        btn.title = isLeft ? '固定到左侧' : '固定到右侧';
+      }
+
+      // 恢复原始状态
+      if (this.state.originModalRect) {
+        const { left, top, width, height } = this.state.originModalRect;
+        Object.assign(this.state.element.style, {
+          left: `${left}px`,
+          top: `${top}px`,
+          width: `${width}px`,
+          height: `${height}px`
+        });
+      }
+
+      content.style[marginKey] = '';
+      this.state.element.classList.remove(cssClass);
+      
+      // 如果两侧都未固定，清空原始位置记录
+      if (!this.state.isPinLeft && !this.state.isPinRight) {
+        this.state.originModalRect = null;
+        this.state.originContentRect = null;
+      }
+      
+      this._setupInteractJS();
+    }
+  }
+
+  /**
+   * 响应式处理：窗口大小变化时重新计算固定布局
+   */
+  private _handleResize = debounce(() => {
     if (!this.state.element) return;
 
-    const sidebar = document.getElementById('typora-sidebar'); // 获取侧边栏元素
-    if (!sidebar) return;
+    const content = document.querySelector('#write') as HTMLElement;
+    if (!content) return;
 
-    // 切换嵌入状态
-    this.state.element.classList.toggle('sidebar-embedded');
-    this.state.isEmbedded = this.state.element.classList.contains('sidebar-embedded');
+    // 临时清除 margin 以获取真实的 content 位置
+    const oldMarginLeft = content.style.marginLeft;
+    const oldMarginRight = content.style.marginRight;
+    content.style.marginLeft = '';
+    content.style.marginRight = '';
 
-    // 更新拖动设置（根据嵌入状态和用户设置）
-    this._updateInteractSettings();
+    const contentRect = content.getBoundingClientRect();
+    const modalRect = this.state.element.getBoundingClientRect();
 
-    // 获取嵌入按钮元素
-    const embedBtn = this.state.element.querySelector('[data-action="dock-left"]') as HTMLElement;
+    const viewportHeight = window.innerHeight;
+    const modalHeight = viewportHeight - contentRect.top;
+    const newWidth = contentRect.width * this.options.widthPercentWhenPinRight / 100;
 
-    // 判断是否处于嵌入状态
-    if (this.state.isEmbedded) {
-      // 进入嵌入模式
-      const rect = sidebar.getBoundingClientRect();             // 获取侧边栏边界矩形
-      // 设置窗口位置和尺寸与侧边栏一致
-      this.state.element.style.top = `${rect.top}px`;
-      this.state.element.style.left = `${rect.left}px`;
-      this.state.element.style.width = `${rect.width}px`;
-      this.state.element.style.height = `${rect.height}px`;
-      // 更新按钮图标和提示
-      if (embedBtn) {
-        embedBtn.innerHTML = '🔗';                              // 更改按钮图标
-        embedBtn.title = '取消嵌入';                             // 更改按钮提示
-      }
-
-      // 监听侧边栏尺寸变化，实时同步窗口尺寸
-      this.state.resizeObserver = new ResizeObserver(() => {
-        // 如果处于嵌入状态且组件元素存在
-        if (this.state.isEmbedded && this.state.element) {
-          const newRect = sidebar.getBoundingClientRect();      // 获取新的边界矩形
-          // 更新窗口尺寸和位置
-          this.state.element.style.width = `${newRect.width}px`;
-          this.state.element.style.height = `${newRect.height}px`;
-          this.state.element.style.top = `${newRect.top}px`;
-          this.state.element.style.left = `${newRect.left}px`;
-        }
-      });
-      this.state.resizeObserver.observe(sidebar);               // 开始观察侧边栏
+    if (this.state.isPinRight) {
+      this.state.element.style.top = `${contentRect.top}px`;
+      this.state.element.style.height = `${modalHeight}px`;
+      this.state.element.style.width = `${newWidth}px`;
+      this.state.element.style.left = `${contentRect.right - newWidth}px`;
+      content.style.marginRight = `${newWidth}px`;
+      content.style.marginLeft = '';
+    } else if (this.state.isPinLeft) {
+      this.state.element.style.top = `${contentRect.top}px`;
+      this.state.element.style.height = `${modalHeight}px`;
+      this.state.element.style.width = `${newWidth}px`;
+      this.state.element.style.left = `${contentRect.left}px`;
+      content.style.marginLeft = `${newWidth}px`;
+      content.style.marginRight = '';
     } else {
-      // 退出嵌入模式，恢复悬浮状态
-      // 恢复用户设置的默认尺寸
-      this.state.element.style.width = `${this.options.tocWindowWidth}px`;
-      this.state.element.style.height = `${this.options.tocWindowHeight}px`;
-      // 清除位置样式，使用 CSS 默认定位
-      this.state.element.style.top = '';
-      this.state.element.style.left = '';
-      // 更新按钮图标和提示
-      if (embedBtn) {
-        embedBtn.innerHTML = '📌';                              // 更改按钮图标
-        embedBtn.title = '嵌入侧边栏';                           // 更改按钮提示
-      }
-      // 停止监听侧边栏尺寸变化
-      this.state.resizeObserver?.disconnect();
-      this.state.resizeObserver = null;
+      // 恢复原 margin
+      content.style.marginLeft = oldMarginLeft;
+      content.style.marginRight = oldMarginRight;
     }
-    // 注意：不自动执行适应视图，保持用户当前的缩放状态
-  }
+  }, 100);
 
   private async _fitToView(event?: MouseEvent) {
     // 如果 Markmap 实例或组件元素不存在，则直接返回
@@ -1553,11 +1660,15 @@ export class TocMindmapComponent {
     const svg = this.state.element.querySelector('.markmap-svg') as SVGElement;
     if (!svg) return;
 
+    logger(`[_panAndZoomToNode] SVG 尺寸: width=${svg.clientWidth}, height=${svg.clientHeight}`);
+    logger(`[_panAndZoomToNode] 导图窗口尺寸: width=${this.state.element.clientWidth}, height=${this.state.element.clientHeight}`);
+
     const transform = zoomTransform(svg);                         // 获取当前缩放变换
     // 计算聚焦节点时的最优缩放比例
     const scale = this._calculateOptimalScale(targetElement, headingObj, transform.k);
 
     const svgRect = svg.getBoundingClientRect();                  // 获取 SVG 边界矩形
+    logger(`[_panAndZoomToNode] SVG 实际位置: left=${svgRect.left}, right=${svgRect.right}, width=${svgRect.width}`);
     const nodeRect = targetElement.getBoundingClientRect();       // 获取节点边界矩形
 
     // 计算节点在 SVG 坐标系中的中心位置

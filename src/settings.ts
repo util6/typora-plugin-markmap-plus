@@ -192,15 +192,6 @@ export class MarkmapSettingTab extends SettingTab {
       })
     })
 
-    // 固定状态拖动设置
-    this.addSetting(item => {
-      item.addName('固定时允许拖动')
-      item.addDescription('当思维导图固定到侧边栏时，是否仍允许拖动位置')
-      item.addCheckbox((checkbox) => {
-        checkbox.checked = this.settings.get('allowDragWhenEmbedded')
-        checkbox.onchange = () => this.settings.set('allowDragWhenEmbedded', checkbox.checked)
-      })
-    })
 
     // 悬浮按钮大小设置
     this.addSetting(item => {
