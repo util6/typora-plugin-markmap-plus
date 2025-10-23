@@ -1453,20 +1453,27 @@ export class TocMindmapComponent {
         this.state.originContentRect = content.getBoundingClientRect();
       }
 
-      const { top, width, left, right } = content.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
+      const { width, left, right, top: contentTop } = contentRect;
       const newWidth = width * this.options.widthPercentWhenPinRight / 100;
 
       const viewportHeight = window.innerHeight;
-      const modalHeight = viewportHeight - top;
+      const modalHeight = viewportHeight;
+
+      logger(`固定到${side === 'left' ? '左' : '右'}侧: contentTop=${contentTop}, left=${left}, right=${right}, width=${width}, viewportHeight=${viewportHeight}, newWidth=${newWidth}, finalLeft=${isLeft ? left : right - newWidth}`);
 
       // 设置导图位置
       Object.assign(this.state.element.style, {
-        top: `${top}px`,
+        top: '0px',
         left: isLeft ? `${left}px` : `${right - newWidth}px`,
         width: `${newWidth}px`,
         height: `${modalHeight}px`,
         transform: 'none'
       });
+
+      // 验证实际位置
+      const actualRect = this.state.element.getBoundingClientRect();
+      logger(`固定后实际位置: top=${actualRect.top}, left=${actualRect.left}, width=${actualRect.width}, height=${actualRect.height}`);
 
       // 调整内容区域
       content.style[marginKey] = `${newWidth}px`;
@@ -1539,21 +1546,20 @@ export class TocMindmapComponent {
     content.style.marginRight = '';
 
     const contentRect = content.getBoundingClientRect();
-    const modalRect = this.state.element.getBoundingClientRect();
 
     const viewportHeight = window.innerHeight;
-    const modalHeight = viewportHeight - contentRect.top;
+    const modalHeight = viewportHeight;
     const newWidth = contentRect.width * this.options.widthPercentWhenPinRight / 100;
 
     if (this.state.isPinRight) {
-      this.state.element.style.top = `${contentRect.top}px`;
+      this.state.element.style.top = '0px';
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
       this.state.element.style.left = `${contentRect.right - newWidth}px`;
       content.style.marginRight = `${newWidth}px`;
       content.style.marginLeft = '';
     } else if (this.state.isPinLeft) {
-      this.state.element.style.top = `${contentRect.top}px`;
+      this.state.element.style.top = '0px';
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
       this.state.element.style.left = `${contentRect.left}px`;
