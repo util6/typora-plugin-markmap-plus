@@ -76,6 +76,8 @@ export interface TocMindmapOptions {
   exportDirectory: string
   /** 固定到右侧时，导图窗口占内容区域宽度的百分比 */
   widthPercentWhenPinRight: number
+  /** 工具栏位置：'top' 顶部 | 'side' 侧边 */
+  toolbarPosition: 'top' | 'side'
 
   // 高级配置
   /** Markmap 水平间距 */
@@ -124,6 +126,7 @@ export const DEFAULT_TOC_OPTIONS: TocMindmapOptions = {
   highlightDuration: 1500,      // 默认高亮持续时间为 1500 毫秒
   exportDirectory: '',          // 默认导出目录为空
   widthPercentWhenPinRight: 30, // 默认固定到右侧时占 30% 宽度
+  toolbarPosition: 'top',       // 默认工具栏位置为顶部
 
   // 高级配置默认值
   spacingHorizontal: 80,        // 默认水平间距为 80 像素
@@ -248,6 +251,62 @@ const COMPONENT_STYLE = `
     border-radius: 0;                   /* 无圆角 */
     border-left: none;                  /* 无左边框 */
   }
+
+  /* 侧边工具栏布局 */
+  .markmap-toc-modal.toolbar-side {
+    flex-direction: row;                /* 水平排列 */
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-header {
+    position: absolute;                 /* 绝对定位 */
+    right: 8px;                         /* 距离右边 8px */
+    top: 50%;                           /* 距离顶部 50% */
+    transform: translateY(-50%);        /* 垂直居中 */
+    z-index: 10;                        /* 层级 */
+    background: transparent;            /* 透明背景 */
+    border: none;                       /* 无边框 */
+    padding: 0;                         /* 无内边距 */
+    width: auto;                        /* 自动宽度 */
+    cursor: default;                    /* 默认鼠标样式 */
+  }
+
+  /* 固定到左侧时，按钮在右侧 */
+  .markmap-toc-modal.toolbar-side.pinned-left .markmap-toc-header {
+    right: 8px;
+    left: auto;
+  }
+
+  /* 固定到右侧时，按钮在左侧 */
+  .markmap-toc-modal.toolbar-side.pinned-right .markmap-toc-header {
+    left: 8px;
+    right: auto;
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-title {
+    display: none;                      /* 隐藏标题 */
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-buttons {
+    flex-direction: column;             /* 垂直排列 */
+    gap: 8px;                           /* 按钮间距 */
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-btn {
+    padding: 4px 6px;                   /* 内边距 */
+    font-size: 16px;                    /* 字体大小 */
+    background: transparent;            /* 透明背景 */
+    border: none;                       /* 无边框 */
+    color: #666;                        /* 文字颜色 */
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-btn:hover {
+    background: rgba(0,0,0,0.05);       /* 悬停时淡灰色背景 */
+    color: #333;                        /* 悬停时文字变深 */
+  }
+
+  .markmap-toc-modal.toolbar-side .markmap-toc-content {
+    flex: 1;                            /* 占满剩余空间 */
+  }
 `;
 
 // =======================================================
@@ -258,12 +317,12 @@ const COMPONENT_TEMPLATE = `
   <div class="markmap-toc-header">
     <span class="markmap-toc-title"></span>
     <div class="markmap-toc-buttons">
-      <button class="markmap-toc-btn" data-action="pin-left" title="固定到左侧">️◀️</button>
-      <button class="markmap-toc-btn" data-action="pin-right" title="固定到右侧">▶️</button>
-      <button class="markmap-toc-btn" data-action="zoom-in" title="放大">🔍+</button>
-      <button class="markmap-toc-btn" data-action="zoom-out" title="缩小">🔍-</button>
-      <button class="markmap-toc-btn" data-action="fit" title="适应视图">🎯</button>
-      <button class="markmap-toc-btn" data-action="export" title="导出">💾</button>
+      <button class="markmap-toc-btn" data-action="pin-left" title="固定到左侧">◀</button>
+      <button class="markmap-toc-btn" data-action="pin-right" title="固定到右侧">▶</button>
+      <button class="markmap-toc-btn" data-action="zoom-in" title="放大">+</button>
+      <button class="markmap-toc-btn" data-action="zoom-out" title="缩小">−</button>
+      <button class="markmap-toc-btn" data-action="fit" title="适应视图">⌖</button>
+      <button class="markmap-toc-btn" data-action="export" title="导出">↓</button>
       <button class="markmap-toc-btn" data-action="close" title="关闭">×</button>
     </div>
   </div>
@@ -546,6 +605,10 @@ export class TocMindmapComponent {
   private _createElement() {
     const container = document.createElement('div');          // 创建 div 元素作为容器
     container.className = 'markmap-toc-modal';                // 设置 CSS 类名
+    // 根据配置添加工具栏位置类
+    if (this.options.toolbarPosition === 'side') {
+      container.classList.add('toolbar-side');
+    }
     container.style.width = `${this.options.tocWindowWidth}px`;   // 设置宽度
     container.style.height = `${this.options.tocWindowHeight}px`; // 设置高度
     container.innerHTML = COMPONENT_TEMPLATE;                 // 填充 HTML 模板
@@ -595,9 +658,9 @@ export class TocMindmapComponent {
   /**
    * 更新 InteractJS 拖动设置
    *
-   * 根据嵌入状态和用户设置动态调整拖动功能：
-   * - 嵌入状态且不允许拖动：禁用拖动，光标显示为默认
-   * - 其他情况：启用拖动，光标显示为移动图标
+   * 根据工具栏位置动态调整拖动功能：
+   * - 侧边栏模式：禁用标题栏拖动
+   * - 顶部模式：启用标题栏拖动
    */
   private _updateInteractSettings() {
     // 如果组件元素不存在，则直接返回
@@ -607,6 +670,13 @@ export class TocMindmapComponent {
     const interactInstance = interact(this.state.element);
     // 获取标题栏元素
     const header = this.state.element.querySelector('.markmap-toc-header') as HTMLElement;
+
+    // 侧边栏模式下禁用拖动
+    if (this.options.toolbarPosition === 'side') {
+      interactInstance.draggable(false);
+      if (header) header.style.cursor = 'default';
+      return;
+    }
 
     // 启用拖动
     interactInstance.draggable({
@@ -1426,11 +1496,11 @@ export class TocMindmapComponent {
       this.state[otherStateKey] = false;
       content.style[otherMarginKey] = '';
       this.state.element.classList.remove(otherCssClass);
-      
+
       // 更新另一侧按钮状态
       const otherBtn = this.state.element.querySelector(`[data-action="pin-${isLeft ? 'right' : 'left'}"]`) as HTMLElement;
       if (otherBtn) {
-        otherBtn.innerHTML = isLeft ? '▶️' : '◀️';
+        otherBtn.innerHTML = isLeft ? '▶' : '◀';
         otherBtn.title = isLeft ? '固定到右侧' : '固定到左侧';
       }
     }
@@ -1443,7 +1513,7 @@ export class TocMindmapComponent {
     if (this.state[stateKey]) {
       // 更新按钮状态
       if (btn) {
-        btn.innerHTML = isLeft ? '⏸️' : '⏸️';
+        btn.innerHTML = '⏸';
         btn.title = isLeft ? '取消固定左侧' : '取消固定右侧';
       }
 
@@ -1502,7 +1572,7 @@ export class TocMindmapComponent {
     } else {
       // 更新按钮状态
       if (btn) {
-        btn.innerHTML = isLeft ? '◀️' : '▶️';
+        btn.innerHTML = isLeft ? '◀' : '▶';
         btn.title = isLeft ? '固定到左侧' : '固定到右侧';
       }
 
@@ -1519,13 +1589,13 @@ export class TocMindmapComponent {
 
       content.style[marginKey] = '';
       this.state.element.classList.remove(cssClass);
-      
+
       // 如果两侧都未固定，清空原始位置记录
       if (!this.state.isPinLeft && !this.state.isPinRight) {
         this.state.originModalRect = null;
         this.state.originContentRect = null;
       }
-      
+
       this._setupInteractJS();
     }
   }

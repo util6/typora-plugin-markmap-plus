@@ -173,6 +173,20 @@ export class MarkmapSettingTab extends SettingTab {
       })
     })
 
+    // 工具栏位置设置
+    this.addSetting(item => {
+      item.addName('工具栏位置')
+      item.addDescription('选择工具栏显示在顶部还是侧边')
+      item.addSelect((select) => {
+        select.innerHTML = `
+          <option value="top">顶部</option>
+          <option value="side">侧边</option>
+        `
+        select.value = this.settings.get('toolbarPosition')
+        select.onchange = () => this.settings.set('toolbarPosition', select.value as 'top' | 'side')
+      })
+    })
+
     // 动画持续时间设置
     this.addSetting(item => {
       item.addName('动画持续时间')
