@@ -36,6 +36,7 @@ export const SETTING_CONSTRAINTS = {
   headingHighlightColor: { default: DEFAULT_TOC_OPTIONS.headingHighlightColor },
   nodeHighlightColor: { default: DEFAULT_TOC_OPTIONS.nodeHighlightColor },
   highlightDuration: { min: 500, max: 5000, default: DEFAULT_TOC_OPTIONS.highlightDuration },
+  widthPercentWhenPin: { min: 10, max: 80, default: DEFAULT_TOC_OPTIONS.widthPercentWhenPin },
 }
 
 /**
@@ -184,6 +185,24 @@ export class MarkmapSettingTab extends SettingTab {
         `
         select.value = this.settings.get('toolbarPosition')
         select.onchange = () => this.settings.set('toolbarPosition', select.value as 'top' | 'side')
+      })
+    })
+
+    // 固定时宽度百分比设置
+    this.addSetting(item => {
+      item.addName('固定时宽度百分比')
+      item.addDescription('固定到左侧或右侧时，导图窗口占视口宽度的百分比')
+      item.addInput('number', (input) => {
+        const config = SETTING_CONSTRAINTS.widthPercentWhenPin
+        input.value = this.settings.get('widthPercentWhenPin').toString()
+        input.min = config.min.toString()
+        input.max = config.max.toString()
+        input.onchange = () => {
+          const value = parseInt(input.value)
+          if (value >= config.min && value <= config.max) {
+            this.settings.set('widthPercentWhenPin', value)
+          }
+        }
       })
     })
 

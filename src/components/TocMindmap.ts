@@ -74,8 +74,8 @@ export interface TocMindmapOptions {
   highlightDuration: number
   /** 导出文件的保存目录 */
   exportDirectory: string
-  /** 固定到右侧时，导图窗口占内容区域宽度的百分比 */
-  widthPercentWhenPinRight: number
+  /** 固定时，导图窗口占视口宽度的百分比 */
+  widthPercentWhenPin: number
   /** 工具栏位置：'top' 顶部 | 'side' 侧边 */
   toolbarPosition: 'top' | 'side'
 
@@ -125,7 +125,7 @@ export const DEFAULT_TOC_OPTIONS: TocMindmapOptions = {
   nodeHighlightColor: 'rgba(142, 110, 255, 0.7)',  // 默认节点高亮颜色为紫色半透明
   highlightDuration: 1500,      // 默认高亮持续时间为 1500 毫秒
   exportDirectory: '',          // 默认导出目录为空
-  widthPercentWhenPinRight: 30, // 默认固定到右侧时占 30% 宽度
+  widthPercentWhenPin: 30,      // 默认固定时占 30% 视口宽度
   toolbarPosition: 'top',       // 默认工具栏位置为顶部
 
   // 高级配置默认值
@@ -1523,19 +1523,49 @@ export class TocMindmapComponent {
         this.state.originContentRect = content.getBoundingClientRect();
       }
 
+      // 临时清除 margin 以获取真实的 content 位置
+      const oldMarginLeft = content.style.marginLeft;
+      const oldMarginRight = content.style.marginRight;
+      content.style.marginLeft = '';
+      content.style.marginRight = '';
+
       const contentRect = content.getBoundingClientRect();
       const { width, left, right, top: contentTop } = contentRect;
-      const newWidth = width * this.options.widthPercentWhenPinRight / 100;
 
       const viewportHeight = window.innerHeight;
-      const modalHeight = viewportHeight;
+      const viewportWidth = window.innerWidth;
+      const modalHeight = viewportHeight - contentTop;
+      
+      // 使用配置的百分比计算导图窗口宽度
+      const newWidth = Math.floor(viewportWidth * this.options.widthPercentWhenPin / 100);
+      
+      // 固定到左侧时，减去左侧工具栏宽度
+      let ribbonWidth = 0;
+      if (isLeft) {
+        const ribbon = document.querySelector('.typ-ribbon') as HTMLElement;
+        if (ribbon) ribbonWidth = ribbon.offsetWidth;
+      }
+      
+      const newLeft = isLeft ? ribbonWidth : viewportWidth - newWidth;
 
-      logger(`固定到${side === 'left' ? '左' : '右'}侧: contentTop=${contentTop}, left=${left}, right=${right}, width=${width}, viewportHeight=${viewportHeight}, newWidth=${newWidth}, finalLeft=${isLeft ? left : right - newWidth}`);
+      logger(`========== 固定到${side === 'left' ? '左' : '右'}侧 ==========`);
+      logger(`视口尺寸: width=${viewportWidth}, height=${viewportHeight}`);
+      logger(`#write位置: left=${left}, right=${right}, top=${contentTop}, width=${width}`);
+      logger(`导图窗口计算: left=${newLeft}, width=${newWidth}, height=${modalHeight}`);
+      if (isLeft) {
+        logger(`  - 导图左边界: 0 (视口左边缘)`);
+        logger(`  - 导图右边界: ${newWidth} (#write左边缘)`);
+        logger(`  - #write左边界: ${left}`);
+      } else {
+        logger(`  - #write右边界: ${right}`);
+        logger(`  - 导图左边界: ${newLeft} (#write右边缘)`);
+        logger(`  - 导图右边界: ${viewportWidth} (视口右边缘)`);
+      }
 
       // 设置导图位置
       Object.assign(this.state.element.style, {
-        top: '0px',
-        left: isLeft ? `${left}px` : `${right - newWidth}px`,
+        top: `${contentTop}px`,
+        left: `${newLeft}px`,
         width: `${newWidth}px`,
         height: `${modalHeight}px`,
         transform: 'none'
@@ -1543,7 +1573,8 @@ export class TocMindmapComponent {
 
       // 验证实际位置
       const actualRect = this.state.element.getBoundingClientRect();
-      logger(`固定后实际位置: top=${actualRect.top}, left=${actualRect.left}, width=${actualRect.width}, height=${actualRect.height}`);
+      logger(`导图实际位置: left=${actualRect.left}, right=${actualRect.right}, top=${actualRect.top}, width=${actualRect.width}, height=${actualRect.height}`);
+      logger(`margin设置: ${marginKey}=${newWidth}px`);
 
       // 调整内容区域
       content.style[marginKey] = `${newWidth}px`;
@@ -1618,21 +1649,23 @@ export class TocMindmapComponent {
     const contentRect = content.getBoundingClientRect();
 
     const viewportHeight = window.innerHeight;
-    const modalHeight = viewportHeight;
-    const newWidth = contentRect.width * this.options.widthPercentWhenPinRight / 100;
+    const viewportWidth = window.innerWidth;
+    const modalHeight = viewportHeight - contentRect.top;
 
     if (this.state.isPinRight) {
-      this.state.element.style.top = '0px';
+      const newWidth = viewportWidth - contentRect.right;
+      this.state.element.style.top = `${contentRect.top}px`;
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
-      this.state.element.style.left = `${contentRect.right - newWidth}px`;
+      this.state.element.style.left = `${contentRect.right}px`;
       content.style.marginRight = `${newWidth}px`;
       content.style.marginLeft = '';
     } else if (this.state.isPinLeft) {
-      this.state.element.style.top = '0px';
+      const newWidth = contentRect.left;
+      this.state.element.style.top = `${contentRect.top}px`;
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
-      this.state.element.style.left = `${contentRect.left}px`;
+      this.state.element.style.left = '0px';
       content.style.marginLeft = `${newWidth}px`;
       content.style.marginRight = '';
     } else {
