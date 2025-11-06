@@ -429,6 +429,11 @@ export class TocMindmapComponent {
     this.options = { ...this.options, ...newOptions };
     this._updateHighlightStyle(); // 更新高亮样式
 
+    // 如果 widthPercentWhenPin 改变且当前处于 pin 状态，重新计算布局
+    if (newOptions.widthPercentWhenPin !== undefined && (this.state.isPinLeft || this.state.isPinRight)) {
+      this._handleResize();
+    }
+
     // 为简单起见，如果组件可见，则执行一次完整的更新
     // 这足以安全地覆盖所有设置更改，确保新设置立即生效
     if (this.isVisible) {
@@ -1523,17 +1528,9 @@ export class TocMindmapComponent {
         this.state.originContentRect = content.getBoundingClientRect();
       }
 
-      // 临时清除 margin 以获取真实的 content 位置
-      const oldMarginLeft = content.style.marginLeft;
-      const oldMarginRight = content.style.marginRight;
-      content.style.marginLeft = '';
-      content.style.marginRight = '';
-
-      const contentRect = content.getBoundingClientRect();
-      const { width, left, right, top: contentTop } = contentRect;
-
       const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
+      const contentTop = content.offsetTop;
       const modalHeight = viewportHeight - contentTop;
       
       // 使用配置的百分比计算导图窗口宽度
@@ -1550,17 +1547,8 @@ export class TocMindmapComponent {
 
       logger(`========== 固定到${side === 'left' ? '左' : '右'}侧 ==========`);
       logger(`视口尺寸: width=${viewportWidth}, height=${viewportHeight}`);
-      logger(`#write位置: left=${left}, right=${right}, top=${contentTop}, width=${width}`);
+      logger(`#write top=${contentTop}`);
       logger(`导图窗口计算: left=${newLeft}, width=${newWidth}, height=${modalHeight}`);
-      if (isLeft) {
-        logger(`  - 导图左边界: 0 (视口左边缘)`);
-        logger(`  - 导图右边界: ${newWidth} (#write左边缘)`);
-        logger(`  - #write左边界: ${left}`);
-      } else {
-        logger(`  - #write右边界: ${right}`);
-        logger(`  - 导图左边界: ${newLeft} (#write右边缘)`);
-        logger(`  - 导图右边界: ${viewportWidth} (视口右边缘)`);
-      }
 
       // 设置导图位置
       Object.assign(this.state.element.style, {
@@ -1640,38 +1628,30 @@ export class TocMindmapComponent {
     const content = document.querySelector('#write') as HTMLElement;
     if (!content) return;
 
-    // 临时清除 margin 以获取真实的 content 位置
-    const oldMarginLeft = content.style.marginLeft;
-    const oldMarginRight = content.style.marginRight;
-    content.style.marginLeft = '';
-    content.style.marginRight = '';
-
-    const contentRect = content.getBoundingClientRect();
-
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
-    const modalHeight = viewportHeight - contentRect.top;
+    const contentTop = content.offsetTop;
+    const modalHeight = viewportHeight - contentTop;
+    const newWidth = Math.floor(viewportWidth * this.options.widthPercentWhenPin / 100);
 
     if (this.state.isPinRight) {
-      const newWidth = viewportWidth - contentRect.right;
-      this.state.element.style.top = `${contentRect.top}px`;
+      this.state.element.style.top = `${contentTop}px`;
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
-      this.state.element.style.left = `${contentRect.right}px`;
+      this.state.element.style.left = `${viewportWidth - newWidth}px`;
       content.style.marginRight = `${newWidth}px`;
       content.style.marginLeft = '';
     } else if (this.state.isPinLeft) {
-      const newWidth = contentRect.left;
-      this.state.element.style.top = `${contentRect.top}px`;
+      let ribbonWidth = 0;
+      const ribbon = document.querySelector('.typ-ribbon') as HTMLElement;
+      if (ribbon) ribbonWidth = ribbon.offsetWidth;
+      
+      this.state.element.style.top = `${contentTop}px`;
       this.state.element.style.height = `${modalHeight}px`;
       this.state.element.style.width = `${newWidth}px`;
-      this.state.element.style.left = '0px';
+      this.state.element.style.left = `${ribbonWidth}px`;
       content.style.marginLeft = `${newWidth}px`;
       content.style.marginRight = '';
-    } else {
-      // 恢复原 margin
-      content.style.marginLeft = oldMarginLeft;
-      content.style.marginRight = oldMarginRight;
     }
   }, 100);
 
