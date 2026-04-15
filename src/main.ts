@@ -21,27 +21,132 @@ import { loadCSS, loadJS } from 'markmap-view'
 import { logger } from './utils'
 import { MarkmapSettings, DEFAULT_SETTINGS, MarkmapSettingTab } from './settings'
 // 导入我们新建的组件
-import { TocMindmapComponent, IEditorAdapter, TocMindmapOptions, DEFAULT_TOC_OPTIONS } from './components/TocMindmap'
+import { TocMindmapComponent, IEditorAdapter, TocMindmapOptions, DEFAULT_TOC_OPTIONS, HeadingRef } from './components/TocMindmap'
 import { FloatingButtonComponent, FloatingButtonOptions, DEFAULT_FLOATING_BUTTON_OPTIONS } from './components/FloatingButton'
 
 /**
  * Typora 编辑器适配器
  */
 class TyporaAdapter implements IEditorAdapter {
+  private getHeadingText(text: string): string {
+    return text.replace(/^\s{0,3}#{1,6}\s+/, '').trim();
+  }
+
   getMarkdown(): string {
     return editor.getMarkdown();
   }
 
-  getHeadings(): HTMLElement[] {
+  getHeadingRefs(): HeadingRef[] {
     const write = document.querySelector('#write');
+    const headers = (window as any).File?.editor?.nodeMap?.toc?.headers;
+
+    if (Array.isArray(headers) && write) {
+      const refs: Array<HeadingRef | null> = headers
+        .map((header: any) => {
+          const id = header?.cid;
+          const rawText = header?.attributes?.text ?? header?.text ?? header?.get?.('text') ?? '';
+          const text = this.getHeadingText(rawText);
+          const level = Number(header?.depth ?? header?.lvl ?? header?.level ?? header?.attributes?.depth ?? 0) || 0;
+          const element = id ? (write.querySelector(`[cid="${id}"]`) as HTMLElement | null) : null;
+          return id ? { id, text, level, element: element || undefined } : null;
+        });
+      return refs.filter((item): item is HeadingRef => !!item && !!item.text);
+    }
+
     if (!write) return [];
-    return Array.from(write.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-      .filter(h => h.textContent?.trim()) as HTMLElement[];
+
+    const refs: Array<HeadingRef | null> = Array.from(write.querySelectorAll('[mdtype="heading"]'))
+      .map((element) => {
+        const id = element.getAttribute('cid') || '';
+        const text = this.getHeadingText(element.textContent || '');
+        const level = Number(element.tagName.replace(/[^\d]/g, '')) || 0;
+        return id ? { id, text, level, element: element as HTMLElement } : null;
+      });
+    return refs.filter((item): item is HeadingRef => !!item && !!item.text);
+  }
+
+  resolveHeadingElement(id: string): HTMLElement | null {
+    const write = document.querySelector('#write');
+    if (!write) return null;
+    return write.querySelector(`[cid="${id}"]`) as HTMLElement | null;
+  }
+
+  scrollToHeading(id: string, options: { offsetTop: number; highlightClassName: string; highlightDuration: number }): HTMLElement | null {
+    const element = this.resolveHeadingElement(id);
+    if (!element) return null;
+
+    const originalMargin = element.style.scrollMarginTop;
+    element.style.scrollMarginTop = `${options.offsetTop}px`;
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    element.classList.add(options.highlightClassName);
+
+    setTimeout(() => {
+      element.style.scrollMarginTop = originalMargin;
+      element.classList.remove(options.highlightClassName);
+    }, options.highlightDuration);
+
+    return element;
+  }
+
+  getCurrentVisibleHeadingId(viewportOffset: number): string | null {
+    const headingRefs = this.getHeadingRefs();
+    if (headingRefs.length === 0) return null;
+
+    const viewportTop = window.scrollY;
+    const viewportBottom = viewportTop + window.innerHeight;
+    let deepestHeading: HeadingRef | null = null;
+    let maxLevel = 0;
+
+    for (const heading of headingRefs) {
+      const element = heading.element || this.resolveHeadingElement(heading.id);
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const elementTop = rect.top + window.scrollY;
+
+      if (elementTop >= viewportTop - viewportOffset && elementTop <= viewportBottom) {
+        if (heading.level > maxLevel) {
+          maxLevel = heading.level;
+          deepestHeading = heading;
+        }
+      }
+    }
+
+    if (deepestHeading) return deepestHeading.id;
+
+    let closestHeading: HeadingRef | null = null;
+    let minDistance = Infinity;
+    for (const heading of headingRefs) {
+      const element = heading.element || this.resolveHeadingElement(heading.id);
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const elementTop = rect.top + window.scrollY;
+      const distance = Math.abs(elementTop - viewportTop);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestHeading = heading;
+      }
+    }
+
+    return closestHeading?.id || null;
   }
 
   resolveImagePath(src: string): string {
     return editor.imgEdit.getRealSrc(src);
   }
+}
+
+function summarizeSvg(svg: unknown) {
+  const normalizedSvg = String(svg || '').trim().replace(/\sclass="icon"/g, '');
+  let hash = 5381;
+  for (let i = 0; i < normalizedSvg.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ normalizedSvg.charCodeAt(i);
+  }
+
+  return {
+    length: normalizedSvg.length,
+    hash: (hash >>> 0).toString(16),
+    startsWith: normalizedSvg.slice(0, 80),
+  };
 }
 
 /**
@@ -92,6 +197,10 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       for (const key of Object.keys(DEFAULT_FLOATING_BUTTON_OPTIONS) as Array<keyof FloatingButtonOptions>) {
         (buttonOptions as any)[key] = this.settings.get(key);
       }
+      logger('悬浮按钮设置已加载', 'info', {
+        size: buttonOptions.floatingButtonSize,
+        icon: summarizeSvg(buttonOptions.floatingButtonIconSvg),
+      });
       this.floatingButtonComponent = new FloatingButtonComponent(buttonOptions, () => {
         this.tocMindmapComponent.toggle();
       });
@@ -111,6 +220,10 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
         for (const key of Object.keys(DEFAULT_FLOATING_BUTTON_OPTIONS) as Array<keyof FloatingButtonOptions>) {
           (newButtonOptions as any)[key] = this.settings.get(key);
         }
+        logger('悬浮按钮设置变更后重新应用', 'info', {
+          size: newButtonOptions.floatingButtonSize,
+          icon: summarizeSvg(newButtonOptions.floatingButtonIconSvg),
+        });
         this.floatingButtonComponent.updateOptions(newButtonOptions);
       };
 

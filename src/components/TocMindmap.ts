@@ -38,10 +38,23 @@ import interact from 'interactjs';
 export interface IEditorAdapter {
   /** 获取 Markdown 内容 */
   getMarkdown(): string;
-  /** 获取文档中的标题元素 */
-  getHeadings(): HTMLElement[];
+  /** 获取文档中的标题引用 */
+  getHeadingRefs?(): HeadingRef[];
+  /** 通过稳定标题 ID 解析当前 DOM 元素 */
+  resolveHeadingElement?(id: string): HTMLElement | null;
+  /** 滚动到指定标题 */
+  scrollToHeading?(id: string, options: { offsetTop: number; highlightClassName: string; highlightDuration: number }): HTMLElement | null;
+  /** 获取当前视口中最合适的标题 ID */
+  getCurrentVisibleHeadingId?(viewportOffset: number): string | null;
   /** 将相对路径转换为绝对路径 */
   resolveImagePath(src: string): string;
+}
+
+export interface HeadingRef {
+  id: string;
+  text: string;
+  level: number;
+  element?: HTMLElement;
 }
 
 /**
@@ -458,6 +471,8 @@ export class TocMindmapComponent {
     lastHeadingsHash: '',
     /** 双向索引：从 state.path 到 HTMLElement */
     headingElements: new Map<string, HTMLElement>(),
+    /** 从 state.path 到稳定标题 ID */
+    headingIds: new Map<string, string>(),
     /** 双向索引：从 HTMLElement 到 state.path */
     elementToPath: new Map<HTMLElement, string>(),
     /** 是否固定到右侧 */
@@ -562,6 +577,7 @@ export class TocMindmapComponent {
     this.state.contentObserver = null;    // 重置 MutationObserver
     this.state.lastHeadingsHash = '';     // 重置标题哈希值
     this.state.headingElements.clear();   // 清空路径到元素的映射
+    this.state.headingIds.clear();        // 清空路径到标题 ID 的映射
     this.state.elementToPath.clear();     // 清空元素到路径的映射
     this.state.isPinRight = false;        // 重置固定状态
     this.state.isPinLeft = false;         // 重置固定状态
@@ -790,6 +806,75 @@ export class TocMindmapComponent {
     this._eventCleanupFunctions = [];                         // 清空清理函数数组
   }
 
+  private _getNonCodeMarkdownLines(markdownContent: string): string[] {
+    const lines = markdownContent.split('\n');
+    const result: string[] = [];
+    let inFenceBlock = false;
+    let fenceMarker = '';
+
+    for (const line of lines) {
+      const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
+      const isIndentedCodeLine = !inFenceBlock && /^( {4,}|\t)/.test(line);
+
+      if (fenceMatch) {
+        const marker = fenceMatch[2][0];
+        if (!inFenceBlock) {
+          inFenceBlock = true;
+          fenceMarker = marker;
+        } else if (marker === fenceMarker) {
+          inFenceBlock = false;
+          fenceMarker = '';
+        }
+        continue;
+      }
+
+      if (inFenceBlock || isIndentedCodeLine) {
+        continue;
+      }
+
+      result.push(line);
+    }
+
+    return result;
+  }
+
+  /**
+   * 预处理 Markdown，避免代码块内容被错误识别为思维导图节点
+   */
+  private _preprocessMarkdownForMarkmap(markdownContent: string): string {
+    const lines = this._getNonCodeMarkdownLines(markdownContent);
+
+    if (this.options.initialExpandLevel <= 5) {
+      return lines
+        .filter(line => /^#{1,6}\s/.test(line))
+        .join('\n');
+    }
+
+    const result: string[] = [];
+    let currentLevel = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      const headingMatch = line.match(/^(#{1,6})\s/);
+
+      if (headingMatch) {
+        currentLevel = headingMatch[1].length;
+        result.push(line);
+        continue;
+      }
+
+      if (trimmed && !line.startsWith(' ') && !line.startsWith('-') && !line.startsWith('*')) {
+        const indent = '  '.repeat(currentLevel);
+        result.push(`${indent}- ${line}`);
+        continue;
+      }
+
+      result.push(line);
+    }
+
+    return result.join('\n');
+  }
+
   /**
    * 统一的点击事件处理器
    *
@@ -846,9 +931,11 @@ export class TocMindmapComponent {
     // 如果组件元素不存在，则直接返回
     if (!this.state.element) return;
 
-    const headings = this.editorAdapter.getHeadings();        // 获取文档中的标题元素
+    const headingRefs = this._getHeadingRefs();               // 获取文档中的标题引用
     // 生成标题内容的哈希值，用于检测变化
-    const contentHash = headings.map(h => `${h.tagName}:${h.textContent}`).join('|');
+    const contentHash = headingRefs
+      .map(item => `${item.id}:${item.text}`)
+      .join('|');
 
     // 如果内容哈希值未变化，则直接返回
     if (contentHash === this.state.lastHeadingsHash) return;
@@ -867,33 +954,7 @@ export class TocMindmapComponent {
       return;
     }
 
-    // 当层级 <= 5 时只渲染标题，> 5 时包含正文
-    if (this.options.initialExpandLevel <= 5) {
-      // 只保留以 # 开头的行（标题）
-      markdownContent = markdownContent.split('\n').filter(line => /^#{1,6}\s/.test(line)).join('\n');
-    } else {
-      // 将普通段落转换为列表项，使其在 Markmap 中可见
-      const lines = markdownContent.split('\n');              // 按行分割
-      const result: string[] = [];                            // 存储结果
-      let currentLevel = 0;                                   // 当前标题层级
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];                                // 获取当前行
-        const headingMatch = line.match(/^(#{1,6})\s/);       // 匹配标题行
-
-        if (headingMatch) {
-          currentLevel = headingMatch[1].length;              // 更新当前层级
-          result.push(line);                                  // 添加标题行
-        } else if (line.trim() && !line.startsWith(' ') && !line.startsWith('-') && !line.startsWith('*')) {
-          // 普通文本行转换为列表项
-          const indent = '  '.repeat(currentLevel);           // 根据当前层级生成缩进
-          result.push(`${indent}- ${line}`);                  // 转换为列表项
-        } else {
-          result.push(line);                                  // 其他行直接添加
-        }
-      }
-      markdownContent = result.join('\n');                    // 合并为新的 Markdown 内容
-    }
+    markdownContent = this._preprocessMarkdownForMarkmap(markdownContent);
 
     const { root } = this.transformer.transform(markdownContent); // 转换 Markdown 为思维导图数据
 
@@ -929,18 +990,120 @@ export class TocMindmapComponent {
 
     // 延迟执行同步映射操作
     setTimeout(() => {
-      this._syncMapsAfterRender(root, headings);
+      this._syncMapsAfterRender(root, headingRefs);
     }, this.options.delayAttributeSet);
   }
 
   // --- 工具方法：标题处理 ---
 
   /**
-   * 获取文档中的所有标题元素
-   * @returns 标题元素数组
+   * 获取 Markmap 节点的纯文本内容
    */
-  private _getDocumentHeadings(): HTMLElement[] {
-    return this.editorAdapter.getHeadings();                  // 通过适配器获取标题元素
+  private _getNodeText(node: INode | IPureNode | null | undefined): string {
+    if (!node?.content) return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = node.content;
+    return (tempDiv.textContent || '').trim();
+  }
+
+  private _getHeadingTextFromElement(element: HTMLElement | null | undefined): string {
+    if (!element) return '';
+    return (element.textContent || '').replace(/^\s{0,3}#{1,6}\s+/, '').trim();
+  }
+
+  private _getFallbackHeadingRefs(): HeadingRef[] {
+    const write = document.querySelector('#write');
+    if (!write) return [];
+
+    const elements = Array.from(write.querySelectorAll('[mdtype="heading"], h1, h2, h3, h4, h5, h6')) as HTMLElement[];
+    const refs: Array<HeadingRef | null> = elements
+      .map((element, index) => {
+        const text = this._getHeadingTextFromElement(element);
+        if (!text) return null;
+        const id = element.getAttribute('cid') || `fallback-heading-${index}-${text}`;
+        const tagLevel = Number(element.tagName.replace(/[^\d]/g, '')) || 0;
+        const level = tagLevel || Number(element.getAttribute('data-level') || 0) || 0;
+        return { id, text, level, element };
+      });
+    return refs.filter((item): item is HeadingRef => !!item);
+  }
+
+  private _getHeadingRefs(): HeadingRef[] {
+    const refs = this.editorAdapter.getHeadingRefs?.();
+    if (refs && refs.length > 0) return refs;
+    return this._getFallbackHeadingRefs();
+  }
+
+  private _resolveHeadingElement(id: string): HTMLElement | null {
+    const resolved = this.editorAdapter.resolveHeadingElement?.(id);
+    if (resolved) return resolved;
+    const ref = this._getHeadingRefs().find(item => item.id === id);
+    return ref?.element || null;
+  }
+
+  private _scrollToHeading(id: string): HTMLElement | null {
+    const resolved = this.editorAdapter.scrollToHeading?.(id, {
+      offsetTop: this.options.scrollOffsetTop,
+      highlightClassName: 'markmap-highlight',
+      highlightDuration: this.options.highlightDuration,
+    });
+    if (resolved) return resolved;
+
+    const element = this._resolveHeadingElement(id);
+    if (!element) return null;
+
+    const originalMargin = element.style.scrollMarginTop;
+    element.style.scrollMarginTop = `${this.options.scrollOffsetTop}px`;
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    element.classList.add('markmap-highlight');
+    setTimeout(() => {
+      element.style.scrollMarginTop = originalMargin;
+      element.classList.remove('markmap-highlight');
+    }, this.options.highlightDuration);
+
+    return element;
+  }
+
+  private _getCurrentVisibleHeadingId(): string | null {
+    const adapterHeadingId = this.editorAdapter.getCurrentVisibleHeadingId?.(this.options.viewportOffset);
+    if (adapterHeadingId) return adapterHeadingId;
+
+    const headingRefs = this._getHeadingRefs();
+    if (headingRefs.length === 0) return null;
+
+    const viewportTop = window.scrollY;
+    const viewportBottom = viewportTop + window.innerHeight;
+    let deepestHeading: HeadingRef | null = null;
+    let maxLevel = 0;
+
+    for (const heading of headingRefs) {
+      const element = heading.element || this._resolveHeadingElement(heading.id);
+      if (!element) continue;
+      const elementTop = element.getBoundingClientRect().top + window.scrollY;
+      if (elementTop >= viewportTop - this.options.viewportOffset && elementTop <= viewportBottom) {
+        if (heading.level > maxLevel) {
+          maxLevel = heading.level;
+          deepestHeading = heading;
+        }
+      }
+    }
+
+    if (deepestHeading) return deepestHeading.id;
+
+    let closestHeading: HeadingRef | null = null;
+    let minDistance = Infinity;
+    for (const heading of headingRefs) {
+      const element = heading.element || this._resolveHeadingElement(heading.id);
+      if (!element) continue;
+      const elementTop = element.getBoundingClientRect().top + window.scrollY;
+      const distance = Math.abs(elementTop - viewportTop);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestHeading = heading;
+      }
+    }
+
+    return closestHeading?.id || null;
   }
 
   /**
@@ -958,7 +1121,7 @@ export class TocMindmapComponent {
 
     // 向上遍历节点树，直到找到一个在 headingElements 中有记录的标题节点
     // 这是为了处理点击"正文内容"节点时，能够定位到其所属的标题
-    while (currentNode && !this.state.headingElements.has(currentNode.state?.path)) {
+    while (currentNode && !this.state.headingIds.has(currentNode.state?.path)) {
       // 如果当前节点没有在映射中，则移动到其父节点
       currentNode = currentNode.parent;
     }
@@ -967,51 +1130,37 @@ export class TocMindmapComponent {
     // 如果找到了对应的标题节点
     if (currentNode && currentNode.state?.path) {
       const path = currentNode.state.path;                    // 获取节点路径
-      let element = this.state.headingElements.get(path);     // 根据路径获取标题元素
+      const headingId = this.state.headingIds.get(path);
+      let element: HTMLElement | undefined = (headingId ? this._resolveHeadingElement(headingId) || undefined : undefined)
+        || this.state.headingElements.get(path);              // 根据路径获取标题元素
 
       // 降级方案：通过节点内容匹配文档标题
+      if (!element && headingId) {
+        element = this._resolveHeadingElement(headingId) || undefined;
+      }
       if (!element) {
         const node = this._findNodeByStatePath(path);
         if (node?.content) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = node.content;
-          const nodeText = tempDiv.textContent?.trim();
-          const headings = this._getDocumentHeadings();
-          element = headings.find(h => h.textContent?.trim() === nodeText);
+          const nodeText = this._getNodeText(node);
+          const headingRef = this._getHeadingRefs().find(h => h.text === nodeText);
+          if (headingRef) {
+            element = this._resolveHeadingElement(headingRef.id) || headingRef.element || undefined;
+          }
         }
       }
 
-      if (element) {
+      if (headingId) {
         logger(`跳转到标题: ${path}`);
-        this._scrollToElement(element);
+        element = this._scrollToHeading(headingId) || element;
+      } else if (element) {
+        logger(`跳转到标题: ${path}`);
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
         logger(`未找到路径对应的元素: ${path}`, 'warn');
       }
     } else {
       logger(`未找到任何可跳转的父级标题节点`, 'warn');
     }
-  }
-
-  /**
-   * 滚动到指定元素
-   *
-   * @param element 目标元素
-   */
-  private _scrollToElement(element: HTMLElement) {
-    const originalMargin = element.style.scrollMarginTop;     // 保存原始滚动边距
-    // 设置滚动边距，避免被顶栏遮挡
-    element.style.scrollMarginTop = `${this.options.scrollOffsetTop}px`;
-    // 平滑滚动到元素顶部
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    // 添加高亮效果
-    element.classList.add('markmap-highlight');
-
-    // 动画结束后移除类并恢复margin，以便下次可以重新触发
-    setTimeout(() => {
-      element.style.scrollMarginTop = originalMargin;         // 恢复原始滚动边距
-      element.classList.remove('markmap-highlight');          // 移除高亮类
-    }, this.options.highlightDuration); // 持续时间应与动画时间一致
   }
 
   //----------------思维导图节点处理相关方法---------------------
@@ -1028,6 +1177,14 @@ export class TocMindmapComponent {
       ancestors.push(parts.slice(0, i).join('.'));            // 截取并连接路径部分
     }
     return ancestors;                                         // 返回祖先路径数组
+  }
+
+  private _findPathByHeadingId(headingId: string | null | undefined): string | undefined {
+    if (!headingId) return undefined;
+    for (const [path, id] of this.state.headingIds.entries()) {
+      if (id === headingId) return path;
+    }
+    return undefined;
   }
 
   /**
@@ -1051,11 +1208,12 @@ export class TocMindmapComponent {
    * - 严格按照顺序匹配，确保标题元素与节点的一一对应关系
    *
    * @param root INode树根节点 - 来自 Markmap 转换后的节点树根节点
-   * @param headings HTMLElement数组 - 文档中所有的标题元素数组
+   * @param headingRefs HeadingRef数组 - 文档中所有的标题引用数组
    */
-  private _syncMapsAfterRender(root: INode | IPureNode, headings: HTMLElement[]): void {
+  private _syncMapsAfterRender(root: INode | IPureNode, headingRefs: HeadingRef[]): void {
     // 清空旧的映射关系，确保每次更新都是全新的映射
     this.state.headingElements.clear();
+    this.state.headingIds.clear();
     this.state.elementToPath.clear();
 
     // 收集所有非根节点，用于后续遍历处理
@@ -1069,18 +1227,16 @@ export class TocMindmapComponent {
     };
     collectNodes(root, true);
 
-    // 创建临时DOM容器用于解析节点内容文本
-    // 通过innerHTML和textContent的组合，可以准确提取节点的纯文本内容
-    const tempDiv = document.createElement('div');
     // 标题元素索引，用于顺序匹配
     let headingDomIndex = 0;
+    const sources = headingRefs;
 
     // 遍历收集到的所有节点，并与标题元素进行匹配
-    logger(`开始匹配: nodeList=${nodeList.length}, headings=${headings.length}`);
+    logger(`开始匹配: nodeList=${nodeList.length}, headings=${sources.length}`);
     for (let i = 0; i < nodeList.length; ) {
       const node = nodeList[i];
       // 如果标题元素已经全部匹配完毕，则停止处理
-      if (headingDomIndex >= headings.length) break;
+      if (headingDomIndex >= sources.length) break;
 
       // 确保节点有state和path，如果没有则生成临时path
       if (!('state' in node)) continue;
@@ -1088,21 +1244,20 @@ export class TocMindmapComponent {
       const originalPath = node.state.path;
 
       // 获取当前待匹配的标题元素
-      const currentHeadingElement = headings[headingDomIndex];
-      // 解析节点内容，提取纯文本用于比较
-      tempDiv.innerHTML = node.content || '';
-      const cleanNodeText = tempDiv.textContent || '';
-
+      const currentHeading = sources[headingDomIndex];
+      const cleanNodeText = this._getNodeText(node);
+      const currentHeadingText = currentHeading.text;
 
       // 当前节点内容与当前标题元素文本一致时，建立双向映射
       // trim()用于去除首尾空白字符，提高匹配准确性
-      if (cleanNodeText.trim() === currentHeadingElement.textContent?.trim()) {
+      if (cleanNodeText === currentHeadingText) {
         // 获取节点路径，作为映射的键
         const path = node.state.path;
-        // 建立从路径到元素的映射
-        this.state.headingElements.set(path, currentHeadingElement);
-        // 建立从元素到路径的映射
-        this.state.elementToPath.set(currentHeadingElement, path);
+        this.state.headingIds.set(path, currentHeading.id);
+        if (currentHeading.element) {
+          this.state.headingElements.set(path, currentHeading.element);
+          this.state.elementToPath.set(currentHeading.element, path);
+        }
 
         // 移动到下一个标题元素
         headingDomIndex++;
@@ -1189,58 +1344,6 @@ export class TocMindmapComponent {
 
     // 从根节点开始搜索
     return searchNode(this.state.markmap.state.data);
-  }
-
-  /**
-   * 获取当前视口中可见的标题
-   * @returns 标题元素或null
-   */
-  private _getCurrentVisibleHeading(): HTMLElement | null {
-    // 获取文档中的所有标题元素
-    const headings = this._getDocumentHeadings();
-    if (headings.length === 0) return null;                   // 如果没有标题，则返回 null
-
-    // 计算当前视口的上下边界
-    const viewportTop = window.scrollY;                       // 视口顶部位置
-    const viewportBottom = viewportTop + window.innerHeight;  // 视口底部位置
-
-    // 查找视窗内层级最小（最深）的标题
-    let deepestHeading: HTMLElement | null = null;
-    let maxLevel = 0;
-
-    // 遍历所有标题元素，查找视窗内层级最深的标题
-    for (const heading of headings) {
-      const rect = heading.getBoundingClientRect();            // 获取标题元素的边界矩形
-      const elementTop = rect.top + window.scrollY;           // 计算元素顶部位置
-
-      // 如果标题元素在视口内（考虑偏移量）
-      if (elementTop >= viewportTop - this.options.viewportOffset && elementTop <= viewportBottom) {
-        const level = parseInt(heading.tagName.substring(1)); // 获取标题层级 (h1->1, h5->5)
-        if (level > maxLevel) {
-          maxLevel = level;
-          deepestHeading = heading;
-        }
-      }
-    }
-
-    // 如果视窗内有标题，返回最深层级的标题
-    if (deepestHeading) return deepestHeading;
-
-    // 否则返回最接近视口顶部的标题
-    let closestHeading: HTMLElement | null = null;
-    let minDistance = Infinity;
-    for (const heading of headings) {
-      const rect = heading.getBoundingClientRect();
-      const elementTop = rect.top + window.scrollY;
-      const distance = Math.abs(elementTop - viewportTop);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestHeading = heading;
-      }
-    }
-
-    // 返回最接近视口顶部的标题元素
-    return closestHeading;
   }
 
   //---------------------------思维导图相关方法结束------------------
@@ -1668,13 +1771,19 @@ export class TocMindmapComponent {
 
     // 如果是用户点击
     if (isUserClick) {
-      const currentElement = this._getCurrentVisibleHeading();  // 获取当前可见标题
+      const currentHeadingId = this._getCurrentVisibleHeadingId();
+      const currentElement = currentHeadingId
+        ? this._resolveHeadingElement(currentHeadingId)
+        : null;
 
       logger('进入 _fitToView，开始适应视图。')
       logger(`当前标题内容:${currentElement?.textContent}`)
 
       // 获取当前元素对应的路径
-      let path = this.state.elementToPath.get(<HTMLElement>currentElement);
+      let path = currentElement ? this.state.elementToPath.get(currentElement) : undefined;
+      if (!path) {
+        path = this._findPathByHeadingId(currentHeadingId);
+      }
 
       // 降级方案：通过内容查找节点
       if (!path && currentElement?.textContent) {

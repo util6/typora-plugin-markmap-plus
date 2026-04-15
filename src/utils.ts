@@ -192,6 +192,57 @@ function repositionMessages() {
   })
 }
 
+function renderDebugActionButton(
+  host: HTMLElement,
+  type: 'copy' | 'clear',
+  label: string,
+) {
+  const iconSvg = type === 'copy'
+    ? `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 9h9v11H9z"></path>
+        <path d="M6 4h9v3H8a2 2 0 0 0-2 2v8H6z"></path>
+      </svg>
+    `
+    : `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 3h6l1 2h4v2H4V5h4z"></path>
+        <path d="M7 9h10l-1 10H8z"></path>
+      </svg>
+    `;
+
+  const shadowRoot = host.shadowRoot || host.attachShadow({ mode: 'open' });
+  shadowRoot.innerHTML = `
+    <style>
+      :host {
+        all: initial;
+      }
+      .debug-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: white;
+        font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        white-space: nowrap;
+      }
+      svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        fill: currentColor;
+        flex: 0 0 auto;
+      }
+      .label {
+        color: inherit;
+      }
+    </style>
+    <span class="debug-action">
+      ${iconSvg}
+      <span class="label">${label}</span>
+    </span>
+  `;
+}
+
 /**
  * 确保复制按钮存在
  * 创建一个置顶的不会消失的消息作为复制按钮
@@ -201,7 +252,6 @@ function ensureCopyButton() {
 
   const copyMsg = document.createElement('div')
   copyMsg.setAttribute('data-copy-logs-button', 'true')
-  copyMsg.textContent = '📋 复制所有日志'
   copyMsg.style.cssText = `
     position: fixed;
     top: 10px;
@@ -216,6 +266,7 @@ function ensureCopyButton() {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     cursor: pointer;
   `
+  renderDebugActionButton(copyMsg, 'copy', '复制所有日志')
 
   copyMsg.addEventListener('click', () => {
     const messages = Array.from(document.querySelectorAll('[data-debug-message]'))
@@ -223,10 +274,10 @@ function ensureCopyButton() {
       .join('\n')
     navigator.clipboard.writeText(messages).then(() => {
       copyMsg.style.background = DEBUG_CONFIG.copySuccessColor
-      copyMsg.textContent = '✓ 已复制'
+      renderDebugActionButton(copyMsg, 'copy', '已复制')
       setTimeout(() => {
         copyMsg.style.background = '#607D8B'
-        copyMsg.textContent = '📋 复制所有日志'
+        renderDebugActionButton(copyMsg, 'copy', '复制所有日志')
       }, 1000)
     })
   })
@@ -243,7 +294,6 @@ function ensureClearButton() {
 
   const clearMsg = document.createElement('div')
   clearMsg.setAttribute('data-clear-logs-button', 'true')
-  clearMsg.textContent = '🗑️ 清除所有日志'
   clearMsg.style.cssText = `
     position: fixed;
     top: 10px;
@@ -258,6 +308,7 @@ function ensureClearButton() {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     cursor: pointer;
   `
+  renderDebugActionButton(clearMsg, 'clear', '清除所有日志')
 
   clearMsg.addEventListener('click', () => {
     document.querySelectorAll('[data-debug-message]').forEach(el => el.remove())
