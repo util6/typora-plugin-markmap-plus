@@ -24,6 +24,11 @@ import { MarkmapSettings, DEFAULT_SETTINGS, MarkmapSettingTab } from './settings
 import { TocMindmapComponent, IEditorAdapter, TocMindmapOptions, DEFAULT_TOC_OPTIONS, HeadingRef } from './components/TocMindmap'
 import { FloatingButtonComponent, FloatingButtonOptions, DEFAULT_FLOATING_BUTTON_OPTIONS } from './components/FloatingButton'
 
+const LEGACY_PLUGIN_IDS = [
+  'typora-community-plugin.markmapplus',
+  'typora-plugin-markmap-plus',
+];
+
 /**
  * Typora 编辑器适配器
  */
@@ -174,6 +179,8 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
     try {
       logger('开始加载 Markmap 插件');
 
+      await this.migrateLegacySettingsIfNeeded();
+
       // 1. 初始化插件设置系统
       this.registerSettings(new PluginSettings(this.app, this.manifest, { version: 1 }));
       this.settings.setDefault(DEFAULT_SETTINGS);
@@ -235,6 +242,39 @@ export default class MarkmapPlugin extends Plugin<MarkmapSettings> {
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger(`插件初始化失败: ${errorMsg}`, 'error', error);
     }
+  }
+
+  private async migrateLegacySettingsIfNeeded() {
+    const currentId = this.manifest.id;
+    const currentFilename = currentId;
+    const config = this.app.config;
+    const currentSettings = config.readConfigJson(currentFilename);
+
+    if (currentSettings && Object.keys(currentSettings).length > 0) {
+      logger('检测到当前插件设置文件已存在，跳过旧设置迁移', 'info', {
+        pluginId: currentId,
+      });
+      return;
+    }
+
+    for (const legacyId of LEGACY_PLUGIN_IDS) {
+      if (legacyId === currentId) continue;
+
+      const legacySettings = config.readConfigJson(legacyId);
+      if (!legacySettings || Object.keys(legacySettings).length === 0) continue;
+
+      await config.writeConfigJson(currentFilename, legacySettings);
+      logger('已迁移旧插件设置到新插件 ID', 'info', {
+        from: legacyId,
+        to: currentId,
+      });
+      return;
+    }
+
+    logger('未检测到可迁移的旧插件设置文件', 'info', {
+      pluginId: currentId,
+      checkedLegacyIds: LEGACY_PLUGIN_IDS,
+    });
   }
 
   /**
